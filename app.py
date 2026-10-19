@@ -427,12 +427,17 @@ def keepalive_loop():
 
 
 _booted = False
+_boot_lock = threading.Lock()
 
 
 @app.before_request
 def boot_once():
     global _booted
-    if not _booted:
+    if _booted:
+        return
+    with _boot_lock:
+        if _booted:
+            return
         _booted = True
         threading.Thread(target=autorun_bots, daemon=True).start()
         threading.Thread(target=monitor_loop, daemon=True).start()
