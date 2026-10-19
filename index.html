@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>HostBot — لوحة التحكم</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐳</text></svg>">
+<style>
+  :root{--bg:#0b0f14;--card:#151c26;--card2:#1b2430;--border:#26303d;--text:#e6edf3;--muted:#8b98a5;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--amber:#f59e0b}
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif;min-height:100vh}
+  a{color:var(--accent);text-decoration:none}
+
+  header{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;background:rgba(13,18,25,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border)}
+  .brand{display:flex;align-items:center;gap:10px;font-size:18px}
+  .brand small{color:var(--muted);font-weight:400;font-size:12px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .chip{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:4px 12px;white-space:nowrap}
+  .chip b{color:var(--text)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+  .btn{background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{border-color:#3a4757}
+  .btn:disabled{opacity:.5;cursor:wait}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.ok{background:#14532d;border-color:#1c7a43;color:#7ee2a8}
+  .btn.danger{background:#3d1717;border-color:#7f2c2c;color:#ff9d9d}
+  .btn.ghost{background:transparent}
+  .btn.small{padding:4px 9px;font-size:12px;border-radius:8px}
+
+  .warn{margin:10px 18px 0;padding:10px 14px;border-radius:10px;background:#3a2a10;border:1px solid #85621c;color:#ffd88a;font-size:13px}
+
+  main{padding:18px;max-width:1400px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
+  .card:hover{border-color:#3a4757}
+  .card-top{display:flex;align-items:center;gap:8px;justify-content:space-between}
+  .card-name{font-weight:600;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dot{width:10px;height:10px;border-radius:50%;background:#4b5563;flex:none}
+  .dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+  .badge{font-size:11px;color:var(--muted);background:var(--card2);border:1px solid var(--border);border-radius:999px;padding:2px 9px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card-meta{margin:9px 0;color:var(--muted);font-size:12px;min-height:16px}
+  .card-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .empty{text-align:center;color:var(--muted);padding:70px 20px;border:1px dashed var(--border);border-radius:16px;font-size:14.5px;line-height:2}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30;display:grid;place-items:center;padding:16px}
+  .drawer{width:min(900px,100%);max-height:92vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid var(--border);background:var(--card2)}
+  .drawer-head .title{display:flex;align-items:center;gap:9px;font-weight:600}
+  .tabs{display:flex;gap:6px;padding:10px 16px 0}
+  .tab{background:transparent;border:0;color:var(--muted);padding:8px 14px;font-size:14px;cursor:pointer;border-bottom:2px solid transparent}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .pane{padding:12px 16px 16px;overflow:auto;flex:1}
+  .pane-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .crumbs{color:var(--muted);font-size:13px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;flex:1;min-width:140px}
+  .crumbs span{cursor:pointer}
+  .crumbs span:hover{color:var(--text)}
+
+  .file-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid transparent}
+  .file-row:hover{background:var(--card2);border-color:var(--border)}
+  .file-row .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
+  .file-row .fsize{color:var(--muted);font-size:11.5px;white-space:nowrap}
+  .file-row .factions{display:flex;gap:4px}
+
+  textarea.editor{width:100%;height:50vh;border-radius:12px;border:1px solid var(--border);background:#0a0e13;color:#d8e2ec;font-family:Consolas,Monaco,monospace;font-size:13.5px;line-height:1.55;padding:12px;resize:vertical;direction:ltr;text-align:left;outline:none}
+  textarea.editor:focus{border-color:var(--accent)}
+
+  pre.log{margin:0;height:55vh;overflow:auto;background:#0a0e13;border:1px solid var(--border);border-radius:12px;padding:12px;font-size:12.5px;line-height:1.5;direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word;color:#c9d4df}
+  .hint{color:var(--muted);font-size:12.5px;padding:30px 10px;text-align:center}
+
+  #toast{position:fixed;bottom:22px;inset-inline-start:50%;transform:translateX(50%);z-index:50;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{background:#1c2733;border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:pop .2s}
+  .toast.err{border-color:#7f2c2c;background:#2a1414;color:#ffb4b4}
+  .toast.ok{border-color:#1c7a43;background:#10241a;color:#9be2b8}
+  @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🐳 <b>HostBot</b> <small>لوحة رفع وتشغيل ملفات Python</small></div>
+  <div class="chips" id="sysChips"></div>
+  <div class="actions">
+    <input type="file" id="quickInput" accept=".py" multiple hidden>
+    <button class="btn primary" id="btnQuick">⬆️ رفع py</button>
+    <button class="btn" id="btnNew">＋ بوت جديد</button>
+    <a class="btn ghost" href="/logout">خروج</a>
+  </div>
+</header>
+
+<div class="warn" id="warnBanner" hidden>⚠️ أنت تستخدم كلمة المرور الافتراضية — عيّن متغير البيئة <b>ADMIN_PASS</b> قبل النشر.</div>
+
+<main>
+  <div class="grid" id="botsGrid"></div>
+  <div class="empty" id="emptyState" hidden>
+    لا توجد بوتات بعد 🐳<br>
+    اضغط <b>⬆️ رفع py</b> بالأعلى واختر ملفات بوتك — سيُنشأ بوت تلقائيًا وتضغط <b>▶ تشغيل</b>.
+  </div>
+</main>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="drawer">
+    <div class="drawer-head">
+      <div class="title"><span class="dot" id="dDot"></span> <span dir="auto" id="dName"></span> <span class="badge" id="dMain"></span></div>
+      <div class="actions">
+        <button class="btn ok" id="dStart">▶ تشغيل</button>
+        <button class="btn" id="dStop">⏹ إيقاف</button>
+        <button class="btn" id="dRestart">🔄 إعادة</button>
+        <button class="btn danger" id="dDelete">🗑 حذف</button>
+        <button class="btn ghost" id="dClose">✕</button>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tabFiles">📂 الملفات</button>
+      <button class="tab" id="tabLogs">📜 الكونسول</button>
+    </div>
+    <div class="pane" id="paneFiles">
+      <div class="pane-toolbar">
+        <div class="crumbs" id="crumbs"></div>
+        <input type="file" id="botUploadInput" multiple hidden>
+        <button class="btn small" id="btnUploadHere">⬆ رفع ملفات هنا</button>
+        <button class="btn small" id="btnNewFile">＋ ملف جديد</button>
+      </div>
+      <div id="filesList"></div>
+    </div>
+    <div class="pane" id="paneLogs" hidden>
+      <div class="pane-toolbar">
+        <button class="btn small" id="btnClearLog">🧹 تفريغ السجل</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
+          <input type="checkbox" id="autoScroll" checked> تتبع تلقائي
+        </label>
+        <span class="hint" id="logState" style="padding:0"></span>
+      </div>
+      <pre class="log" id="logBox">…</pre>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const state = { bots: [], current: null, path: '', tab: 'files', logTimer: null, sysTimer: null, botsTimer: null };
+
+/* ---------- helpers ---------- */
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function joinPath(a, b){ return a ? a + '/' + b : b; }
+function fmtUptime(s){ if(!s) return ''; const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60); if(d) return d+' يوم '+h+' س'; if(h) return h+' س '+m+' د'; return m+' د'; }
+function toast(msg, kind){
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || '');
+  t.textContent = msg;
+  $('toast').appendChild(t);
+  setTimeout(() => t.remove(), 3800);
+}
+async function api(path, options){
+  const res = await fetch(path, options);
+  if (res.status === 401) { location.href = '/login'; throw new Error('unauthorized'); }
+  let data = {};
+  try { data = await res.json(); } catch(e){}
+  if (!res.ok || data.success === false) throw new Error(data.message || ('خطأ ' + res.status));
+  return data;
+}
+async function act(path, body){
+  return api(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {}) });
+}
+
+/* ---------- system chips ---------- */
+async function loadSystem(){
+  try {
+    const d = await api('/api/system');
+    $('sysChips').innerHTML =
+      '<span class="chip">CPU <b>'+ (d.cpu|0) +'%</b></span>' +
+      '<span class="chip">RAM <b>'+ d.mem_used +'/'+ d.mem_total +' MB</b></span>' +
+      '<span class="chip">بوتات <b>'+ d.bots_running +'/'+ d.bots_total +'</b></span>' +
+      '<span class="chip">يعمل منذ <b>'+ fmtUptime(d.uptime) +'</b></span>';
+    $('warnBanner').hidden = !d.default_password;
+  } catch(e){}
+}
+
+/* ---------- bots grid ---------- */
+let lastSig = null;
+function botMetaText(b){
+  return b.running
+    ? ('RAM ' + (b.mem ?? 0) + ' MB · CPU ' + (b.cpu ?? 0) + '%' + (b.uptime ? ' · منذ ' + fmtUptime(b.uptime) : ''))
+    : 'متوقف';
+}
+async function loadBots(){
+  let d;
+  try { d = await api('/api/bots'); } catch(e){ return; }
+  state.bots = d.bots;
+  const grid = $('botsGrid');
+  $('emptyState').hidden = d.bots.length > 0;
+
+  const sig = d.bots.map(b => b.name + '|' + (b.running ? 1 : 0) + '|' + b.main).join(';');
+  if (sig !== lastSig){
+    lastSig = sig;
+    grid.innerHTML = d.bots.map(b => {
+      return '<div class="card" data-bot="' + esc(b.name) + '">' +
+        '<div class="card-top">' +
+          '<div style="display:flex;align-items:center;gap:9px;min-width:0">' +
+            '<span class="dot ' + (b.running ? 'on' : '') + '"></span>' +
+            '<span class="card-name" dir="auto">' + esc(b.name) + '</span>' +
+          '</div>' +
+          '<span class="badge" dir="auto">' + esc(b.main || 'بدون ملف رئيسي') + '</span>' +
+        '</div>' +
+        '<div class="card-meta" data-meta="' + esc(b.name) + '">' + esc(botMetaText(b)) + '</div>' +
+        '<div class="card-actions">' +
+          '<button class="btn small ok" data-act="start" ' + (b.running ? 'disabled' : '') + '>▶ تشغيل</button>' +
+          '<button class="btn small" data-act="stop" ' + (b.running ? '' : 'disabled') + '>⏹ إيقاف</button>' +
+          '<button class="btn small" data-act="restart" ' + (b.running ? '' : 'disabled') + '>🔄 إعادة</button>' +
+          '<button class="btn small" data-act="open">📂 فتح</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } else {
+    // حدّث الأرقام فقط بدون إعادة بناء البطاقات (حتى لا تنقطع ضغطة الزر)
+    d.bots.forEach(b => {
+      const el = grid.querySelector('[data-meta="' + b.name + '"]');
+      if (el) el.textContent = botMetaText(b);
+    });
+  }
+
+  if (state.current){
+    const b = d.bots.find(x => x.name === state.current);
+    if (!b) { closeDrawer(); return; }
+    $('dDot').className = 'dot ' + (b.running ? 'on' : '');
+    $('dMain').textContent = b.main || 'بدون ملف رئيسي';
+  }
+}
+
+$('botsGrid').addEventListener('click', async (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const name = card.dataset.bot;
+  const btn = e.target.closest('button');
+  const actName = btn ? btn.dataset.act : 'open';
+  if (btn) e.stopPropagation();
+  if (actName === 'open') { openDrawer(name); return; }
+  btn.disabled = true;
+  try {
+    await act('/api/bots/' + encodeURIComponent(name) + '/action/' + actName);
+    toast(actName === 'stop' ? 'تم الإيقاف' : 'تم التشغيل', 'ok');
+  } catch(ex){ toast(ex.message, 'err'); }
+  btn.disabled = false;
+  loadBots();
+});
+
+/* ---------- drawer ---------- */
+function openDrawer(name){
+  state.current = name;
+  state.path = '';
+  $('overlay').hidden = false;
+  $('dName').textContent = name;
+  showTab('files');
+  loadFiles('');
+}
+function closeDrawer(){
+  state.current = null;
+  $('overlay').hidden = true;
+  if (state.logTimer){ clearInterval(state.logTimer); state.logTimer = null; }
+}
+$('dClose').addEventListener('click', closeDrawer);
+$('overlay').addEventListener('click', (e) => { if (e.target === $('overlay')) closeDrawer(); });
+
+async function drawerAction(kind){
+  if (!state.current) return;
+  if (kind === 'delete'){
+    if (!confirm('حذف البوت "' + state.current + '"؟ سيتم إيقافه وحذف كل ملفاته.')) return;
+    try { await act('/api/bots/' + encodeURIComponent(state.current) + '/delete'); toast('تم الحذف', 'ok'); }
+    catch(ex){ toast(ex.message, 'err'); return; }
+    closeDrawer(); loadBots(); return;
+  }
+  try {
+    await act('/api/bots/' + encodeURIComponent(state.current) + '/action/' + kind);
+    toast(kind === 'stop' ? 'تم الإيقاف' : 'تم التشغيل', 'ok');
+  } catch(ex){ toast(ex.message, 'err'); }
+  loadBots();
+}
+$('dStart').addEventListener('click', () => drawerAction('start'));
+$('dStop').addEventListener('click', () => drawerAction('stop'));
+$('dRestart').addEventListener('click', () => drawerAction('restart'));
+$('dDelete').addEventListener('click', () => drawerAction('delete'));
+
+/* ---------- tabs ---------- */
+function showTab(tab){
+  state.tab = tab;
+  $('tabFiles').classList.toggle('active', tab === 'files');
+  $('tabLogs').classList.toggle('active', tab === 'logs');
+  $('paneFiles').hidden = tab !== 'files';
+  $('paneLogs').hidden = tab !== 'logs';
+  if (state.logTimer){ clearInterval(state.logTimer); state.logTimer = null; }
+  if (tab === 'logs' && state.current){
+    pollLog();
+    state.logTimer = setInterval(pollLog, 2000);
+  }
+}
+$('tabFiles').addEventListener('click', () => showTab('files'));
+$('tabLogs').addEventListener('click', () => showTab('logs'));
+
+/* ---------- files ---------- */
+async function loadFiles(rel){
+  if (!state.current) return;
+  state.path = rel || '';
+  let d;
+  try { d = await api('/api/bots/' + encodeURIComponent(state.current) + '/files?path=' + encodeURIComponent(state.path)); }
+  catch(ex){ toast(ex.message, 'err'); return; }
+
+  const parts = state.path ? state.path.split('/') : [];
+  let crumb = '<span data-goto="">🏠 الجذر</span>';
+  let acc = '';
+  parts.forEach((p) => {
+    acc = joinPath(acc, p);
+    crumb += ' / <span data-goto="' + esc(acc) + '" dir="auto">' + esc(p) + '</span>';
+  });
+  $('crumbs').innerHTML = crumb;
+
+  const rows = [];
+  d.dirs.forEach(dir => {
+    rows.push('<div class="file-row">' +
+      '<span>📁</span>' +
+      '<span class="fname" dir="auto" style="cursor:pointer" data-dir="' + esc(dir.name) + '">' + esc(dir.name) + '</span>' +
+      '<span class="factions">' +
+        '<button class="btn small danger" data-del="' + esc(dir.name) + '" data-kind="dir">🗑</button>' +
+      '</span></div>');
+  });
+  d.files.forEach(f => {
+    const relPath = joinPath(state.path, f.name);
+    const isMain = d.main === relPath;
+    const isPy = f.name.toLowerCase().endsWith('.py');
+    rows.push('<div class="file-row">' +
+      '<span>📄</span>' +
+      '<span class="fname" dir="auto" style="cursor:pointer" data-edit="' + esc(relPath) + '">' + esc(f.name) + (isMain ? ' <span class="badge" style="color:#7ee2a8;border-color:#1c7a43">★ الملف الرئيسي</span>' : '') + '</span>' +
+      '<span class="fsize">' + esc(f.size_h) + '</span>' +
+      '<span class="factions">' +
+        (isPy && !isMain ? '<button class="btn small" data-main="' + esc(relPath) + '" title="تعيين كملف رئيسي">★</button>' : '') +
+        '<button class="btn small" data-edit="' + esc(relPath) + '">✏️</button>' +
+        '<button class="btn small danger" data-del="' + esc(relPath) + '" data-kind="file">🗑</button>' +
+      '</span></div>');
+  });
+  $('filesList').innerHTML = rows.join('') || '<div class="hint">المجلد فارغ — ارفع ملفاتك من الزر بالأعلى ⬆</div>';
+  $('btnUploadHere').dataset.path = state.path;
+}
+
+$('filesList').addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-dir],[data-edit],[data-del],[data-main]');
+  if (!t) return;
+  if (t.dataset.dir !== undefined){ loadFiles(joinPath(state.path, t.dataset.dir)); return; }
+  if (t.dataset.main !== undefined){
+    try { await act('/api/bots/' + encodeURIComponent(state.current) + '/main', { file: t.dataset.main }); toast('تم تعيين الملف الرئيسي', 'ok'); }
+    catch(ex){ toast(ex.message, 'err'); }
+    loadFiles(state.path); return;
+  }
+  if (t.dataset.edit !== undefined){ openEditor(t.dataset.edit); return; }
+  if (t.dataset.del !== undefined){
+    if (!confirm('حذف "' + t.dataset.del + '"؟')) return;
+    try { await act('/api/bots/' + encodeURIComponent(state.current) + '/delete-file', { path: t.dataset.del, kind: t.dataset.kind }); toast('تم الحذف', 'ok'); }
+    catch(ex){ toast(ex.message, 'err'); }
+    loadFiles(state.path);
+  }
+});
+
+$('crumbs').addEventListener('click', (e) => {
+  const s = e.target.closest('[data-goto]');
+  if (s) loadFiles(s.dataset.goto);
+});
+
+/* upload inside bot */
+$('btnUploadHere').addEventListener('click', () => $('botUploadInput').click());
+$('botUploadInput').addEventListener('change', async (e) => {
+  const files = e.target.files;
+  if (!files || !files.length || !state.current) return;
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  fd.append('path', state.path);
+  try {
+    const d = await api('/api/bots/' + encodeURIComponent(state.current) + '/upload', { method: 'POST', body: fd });
+    toast('تم رفع ' + d.saved.length + ' ملف', 'ok');
+  } catch(ex){ toast(ex.message, 'err'); }
+  e.target.value = '';
+  loadFiles(state.path);
+  loadBots();
+});
+
+/* new empty file */
+$('btnNewFile').addEventListener('click', async () => {
+  const name = prompt('اسم الملف الجديد (مثال: bot.py):');
+  if (!name) return;
+  const clean = name.replace(/[\\/]/g, '');
+  try {
+    await act('/api/bots/' + encodeURIComponent(state.current) + '/file', { path: joinPath(state.path, clean), content: '' });
+    toast('تم إنشاء الملف', 'ok');
+  } catch(ex){ toast(ex.message, 'err'); }
+  loadFiles(state.path);
+});
+
+/* ---------- editor ---------- */
+async function openEditor(rel){
+  let d;
+  try { d = await api('/api/bots/' + encodeURIComponent(state.current) + '/file?path=' + encodeURIComponent(rel)); }
+  catch(ex){ toast(ex.message, 'err'); return; }
+  if (d.binary){ toast('ملف ثنائي — لا يمكن تحريره', 'err'); return; }
+  const holder = $('filesList');
+  holder.innerHTML =
+    '<div class="pane-toolbar">' +
+      '<span class="crumbs" dir="ltr" style="direction:ltr">✏️ ' + esc(rel) + '</span>' +
+      '<button class="btn small ok" id="edSave">💾 حفظ</button>' +
+      '<button class="btn small" id="edBack">رجوع</button>' +
+    '</div>' +
+    '<textarea class="editor" id="edBox" spellcheck="false"></textarea>';
+  $('edBox').value = d.content;
+  $('edSave').addEventListener('click', async () => {
+    try {
+      await act('/api/bots/' + encodeURIComponent(state.current) + '/file', { path: rel, content: $('edBox').value });
+      toast('تم الحفظ', 'ok');
+    } catch(ex){ toast(ex.message, 'err'); }
+  });
+  $('edBack').addEventListener('click', () => loadFiles(state.path));
+}
+
+/* ---------- console ---------- */
+async function pollLog(){
+  if (!state.current || state.tab !== 'logs') return;
+  try {
+    const d = await api('/api/bots/' + encodeURIComponent(state.current) + '/log');
+    const box = $('logBox');
+    const nearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+    box.textContent = d.log || '(لا يوجد سجل بعد)';
+    $('logState').textContent = d.running ? '● يعمل الآن' : '○ متوقف';
+    $('logState').style.color = d.running ? '#22c55e' : '#8b98a5';
+    if ($('autoScroll').checked && nearBottom) box.scrollTop = box.scrollHeight;
+  } catch(e){}
+}
+$('btnClearLog').addEventListener('click', async () => {
+  try { await act('/api/bots/' + encodeURIComponent(state.current) + '/log/clear'); toast('تم تفريغ السجل', 'ok'); pollLog(); }
+  catch(ex){ toast(ex.message, 'err'); }
+});
+
+/* ---------- quick upload / new bot ---------- */
+$('btnQuick').addEventListener('click', () => $('quickInput').click());
+$('quickInput').addEventListener('change', async (e) => {
+  const files = e.target.files;
+  if (!files || !files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  try {
+    const d = await api('/api/quick-upload', { method: 'POST', body: fd });
+    toast('تم الرفع (' + d.saved.length + ' ملف) — اضغط ▶ تشغيل على البوت', 'ok');
+  } catch(ex){ toast(ex.message, 'err'); }
+  e.target.value = '';
+  loadBots();
+});
+$('btnNew').addEventListener('click', async () => {
+  const name = prompt('اسم البوت الجديد (حروف إنجليزية وأرقام وشرطات):');
+  if (!name) return;
+  try {
+    const d = await act('/api/bots', { name });
+    toast('تم إنشاء البوت ' + d.name, 'ok');
+    loadBots();
+  } catch(ex){ toast(ex.message, 'err'); }
+});
+
+/* ---------- start ---------- */
+loadSystem(); loadBots();
+state.sysTimer = setInterval(loadSystem, 5000);
+state.botsTimer = setInterval(loadBots, 3000);
+</script>
+</body>
+</html>

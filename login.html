@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>HostBot — تسجيل الدخول</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐳</text></svg>">
+<style>
+  :root{--bg:#0b0f14;--card:#151c26;--border:#26303d;--text:#e6edf3;--muted:#8b98a5;--accent:#3b82f6;--red:#ef4444}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1200px 600px at 70% -10%,#16233a 0%,var(--bg) 55%);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+  .card{width:min(400px,92vw);background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .logo{font-size:40px;text-align:center}
+  h1{margin:12px 0 4px;font-size:22px;text-align:center}
+  .sub{margin:0 0 24px;text-align:center;color:var(--muted);font-size:13px}
+  label{display:block;margin:14px 0 6px;font-size:13px;color:var(--muted)}
+  input{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:#0e141c;color:var(--text);font-size:15px;outline:none}
+  input:focus{border-color:var(--accent)}
+  button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.6;cursor:wait}
+  .err{margin-top:14px;color:var(--red);font-size:13px;text-align:center;min-height:18px}
+</style>
+</head>
+<body>
+  <form class="card" id="form">
+    <div class="logo">🐳</div>
+    <h1>HostBot</h1>
+    <p class="sub">لوحة رفع وتشغيل ملفات Python</p>
+    <label for="u">اسم المستخدم</label>
+    <input id="u" name="username" autocomplete="username" required>
+    <label for="p">كلمة المرور</label>
+    <input id="p" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit" id="btn">دخول</button>
+    <div class="err" id="err"></div>
+  </form>
+<script>
+const form = document.getElementById('form');
+const btn = document.getElementById('btn');
+const err = document.getElementById('err');
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  err.textContent = '';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        username: document.getElementById('u').value,
+        password: document.getElementById('p').value
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) { location.href = '/'; return; }
+    err.textContent = data.message || ('خطأ ' + res.status);
+  } catch (ex) {
+    err.textContent = 'تعذر الاتصال بالخادم';
+  }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>
