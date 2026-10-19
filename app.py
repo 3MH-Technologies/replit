@@ -59,6 +59,7 @@ MAX_FAILS = int(os.environ.get("MAX_FAILS", "5"))                 # أقصى م�
 FAIL_WINDOW = 600                                                 # نافذة حساب الأعطال (10 دقائق)
 KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()       # رابط عام اختياري للنكزة
 KEEPALIVE_INTERVAL = max(60, int(os.environ.get("KEEPALIVE_INTERVAL", "240")))
+RESTART_ON_CLEAN_EXIT = os.environ.get("RESTART_ON_CLEAN_EXIT", "0").lower() in ("1", "true", "yes", "on")
 
 MAX_LOG_BYTES = 2 * 1024 * 1024     # يُقصّ السجل عند تجاوز هذا الحجم
 LOG_TAIL_BYTES = 128 * 1024         # ما يُعرض في الكونسول
@@ -88,6 +89,8 @@ os.makedirs(BOTS_DIR, exist_ok=True)
 
 PROCS = {}           # اسم البوت -> {"proc": Popen, "started": timestamp}
 PROCS_LOCK = threading.Lock()
+BOT_OP_LOCK = threading.RLock()   # يمنع تشغيل/إيقاف نفس البوت من خيطين في نفس اللحظة
+EXITS = {}           # اسم البوت -> {"at", "started", "code"} آخر خروج
 LOGIN_LOCK = threading.Lock()
 LOGIN_FAILS = {}     # IP -> [أوقات المحاولات الخاطئة]
 
@@ -245,10 +248,12 @@ def proc_info(name):
     with PROCS_LOCK:
         info = PROCS.get(name)
     if info:
-        if info["proc"].poll() is not None:
+        code = info["proc"].poll()
+        if code is not None:
             with PROCS_LOCK:
                 PROCS.pop(name, None)
             clear_pid(name)
+            EXITS[name] = {"at": time.time(), "started": info.get("started", 0), "code": code}
         else:
             return info
     adopted = adopt_running_bot(name)
@@ -288,24 +293,32 @@ def kill_tree(proc):
 
 
 def stop_bot(name, set_autorun=False):
-    with PROCS_LOCK:
-        info = PROCS.pop(name, None)
-    if info:
-        kill_tree(info["proc"])
-    clear_pid(name)
-    meta = read_meta(name)
-    if meta.get("autorun") and set_autorun:
-        meta["autorun"] = False
-        write_meta(name, meta)
+    with BOT_OP_LOCK:
+        with PROCS_LOCK:
+            info = PROCS.pop(name, None)
+        if info:
+            kill_tree(info["proc"])
+        clear_pid(name)
+        meta = read_meta(name)
+        if meta.get("autorun") and set_autorun:
+            meta["autorun"] = False
+            write_meta(name, meta)
 
 
-def start_bot(name):
-    """(يشغّل) يرجع (ok, message)."""
+def start_bot(name, only_if_stopped=False):
+    """(يشغّل) يرجع (ok, message). only_if_stopped يمنع إعادة تشغيل بوت يعمل بالفعل."""
+    with BOT_OP_LOCK:
+        if only_if_stopped and proc_info(name):
+            return True, ""
+        return _start_bot_locked(name)
+
+
+def _start_bot_locked(name):
     path = os.path.join(BOTS_DIR, name)
     meta = read_meta(name)
     main = (meta.get("main") or "").strip()
     if not main:
-        return False, "حدّد الملف الرئيسي (main) أولًا من تبويب الملفات"
+        return False, "حدّد الملف الرئيسي (main) من تبويب الملفات أولًا"
     try:
         main_path = safe_path(path, main)
     except ValueError:
@@ -354,6 +367,7 @@ def start_bot(name):
     with PROCS_LOCK:
         PROCS[name] = {"proc": proc, "started": time.time()}
     write_pid(name, proc.pid)
+    EXITS.pop(name, None)
     meta["autorun"] = True
     write_meta(name, meta)
     logger.info("started bot '%s' (pid=%s)", name, proc.pid)
@@ -405,7 +419,7 @@ def autorun_bots():
             continue
         meta = read_meta(name)
         if meta.get("autorun"):
-            ok, msg = start_bot(name)
+            ok, msg = start_bot(name, only_if_stopped=True)
             logger.info("autorun '%s': %s %s", name, "ok" if ok else "skip", msg)
             time.sleep(0.7)     # توزيع حمل الإقلاع بدل تشغيل كل البوتات دفعة واحدة
 
@@ -432,7 +446,40 @@ def _monitor_once():
                 log_append(name, "[SYSTEM] البوت مستقر — تم تصفير عدّاد الأعطال.\n")
             continue
 
-        # البوت مطلوب تشغيله لكنه متوقف → إعادة تشغيل تلقائية
+        # البوت مطلوب تشغيله لكنه متوقف → ماذا حدث؟
+        exit_info = EXITS.get(name) or {}
+        clean = bool(exit_info) and exit_info.get("code") == 0
+        ran_for = max(0, exit_info.get("at", 0) - exit_info.get("started", 0)) if exit_info else 0
+
+        if clean and ran_for >= STABLE_SECONDS:
+            # عمل فترة محترمة ثم انتهى طبيعيًا → استمرارية: أعده تلقائيًا
+            meta["fails"] = {"count": 0, "first": 0, "last": 0}
+            write_meta(name, meta)
+            log_append(name, "[SYSTEM] انتهى البوت طبيعيًا — إعادة تشغيل تلقائية للحفاظ على الاستمرارية.\n")
+            ok, msg = start_bot(name, only_if_stopped=True)
+            if not ok:
+                log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
+            logger.info("monitor: clean exit restart '%s' -> %s %s", name, ok, msg)
+            time.sleep(0.7)
+            continue
+
+        if clean and ran_for < STABLE_SECONDS and not RESTART_ON_CLEAN_EXIT:
+            # ملف ينتهي فورًا: إعادة تشغيله بلا فائدة — أوقف المحاولات واشرح السبب
+            meta["autorun"] = False
+            meta["fails"] = {"count": 0, "first": 0, "last": 0}
+            write_meta(name, meta)
+            log_append(
+                name,
+                f"[SYSTEM] انتهى الملف فورًا برمز خروج 0 (بعد {int(ran_for)} ثانية) — "
+                "غالبًا لا توجد به حلقة تشغيل دائمة، لذلك لن يُعاد تشغيله تلقائيًا.\n"
+                "[SYSTEM] تأكد من اختيار الملف الرئيسي الصحيح ★، وأن نهاية الملف "
+                "تشغّل البوت فعليًا (مثل application.run_polling()).\n"
+                "[SYSTEM] لإعادة تشغيله عند كل انتهاء طبيعي: RESTART_ON_CLEAN_EXIT=1\n",
+            )
+            logger.info("monitor: '%s' exits instantly with code 0 — autorun disabled", name)
+            continue
+
+        # إعادة تشغيل تلقائية بعد انهيار (أو انتهاء طبيعي بعد عمل مستقر)
         fails = meta.get("fails") or {}
         if not fails.get("first") or now - fails.get("first", 0) > FAIL_WINDOW:
             fails = {"count": 0, "first": now, "last": 0}
@@ -459,7 +506,7 @@ def _monitor_once():
             f"[SYSTEM] مراقب التشغيل: إعادة تشغيل تلقائية "
             f"(محاولة {fails['count']}/{MAX_FAILS})\n",
         )
-        ok, msg = start_bot(name)
+        ok, msg = start_bot(name, only_if_stopped=True)
         if not ok:
             log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
         logger.info("monitor: restart '%s' -> %s %s", name, ok, msg)
@@ -623,6 +670,8 @@ def api_bots():
             "cpu": cpu,
             "mem": mem,
             "uptime": uptime,
+            "exit_code": None if info else (EXITS.get(name) or {}).get("code"),
+            "exit_at": None if info else int((EXITS.get(name) or {}).get("at", 0)) or None,
         })
     return jsonify({"success": True, "bots": bots})
 
@@ -661,7 +710,8 @@ def api_bot_action(name, act):
     if not path:
         return fail("البوت غير موجود", 404)
     if act == "start" or act == "restart":
-        ok, msg = start_bot(name)
+        # "تشغيل" على بوت يعمل بالفعل = لا شيء (لا نقتل نسخة شغّالة بضغطة مكررة)
+        ok, msg = start_bot(name, only_if_stopped=(act == "start"))
         if not ok:
             return fail(msg)
         return jsonify({"success": True})

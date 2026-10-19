@@ -184,9 +184,13 @@ async function loadSystem(){
 /* ---------- bots grid ---------- */
 let lastSig = null;
 function botMetaText(b){
-  return b.running
-    ? ('RAM ' + (b.mem ?? 0) + ' MB · CPU ' + (b.cpu ?? 0) + '%' + (b.uptime ? ' · منذ ' + fmtUptime(b.uptime) : ''))
-    : 'متوقف';
+  if (b.running){
+    return 'RAM ' + (b.mem ?? 0) + ' MB · CPU ' + (b.cpu ?? 0) + '%' + (b.uptime ? ' · منذ ' + fmtUptime(b.uptime) : '');
+  }
+  if (b.exit_code !== null && b.exit_code !== undefined){
+    return 'متوقف · آخر خروج برمز ' + b.exit_code + (b.exit_code === 0 ? ' (انتهى طبيعيًا)' : ' (خطأ)');
+  }
+  return 'متوقف';
 }
 async function loadBots(){
   let d;
@@ -195,7 +199,7 @@ async function loadBots(){
   const grid = $('botsGrid');
   $('emptyState').hidden = d.bots.length > 0;
 
-  const sig = d.bots.map(b => b.name + '|' + (b.running ? 1 : 0) + '|' + b.main).join(';');
+  const sig = d.bots.map(b => b.name + '|' + (b.running ? 1 : 0) + '|' + b.main + '|' + (b.exit_code ?? '')).join(';');
   if (sig !== lastSig){
     lastSig = sig;
     grid.innerHTML = d.bots.map(b => {
