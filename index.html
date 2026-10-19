@@ -323,6 +323,17 @@ async function loadFiles(rel){
   $('crumbs').innerHTML = crumb;
 
   const rows = [];
+  if (state.path === ''){
+    try {
+      const chk = await api('/api/bots/' + encodeURIComponent(state.current) + '/check');
+      if (chk.problem){
+        rows.push('<div class="warn" style="margin:0 0 10px">⚠️ ' + esc(chk.problem) + '</div>');
+      } else if (chk.main){
+        rows.push('<div class="hint" style="padding:0 0 10px;text-align:right">✅ الملف الرئيسي <b dir="auto">' + esc(chk.main) +
+          '</b> — ' + chk.lines + ' سطر · ' + (chk.size/1024).toFixed(1) + ' KB</div>');
+      }
+    } catch(e){}
+  }
   d.dirs.forEach(dir => {
     rows.push('<div class="file-row">' +
       '<span>📁</span>' +

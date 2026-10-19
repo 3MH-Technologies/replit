@@ -328,13 +328,32 @@ def _start_bot_locked(name):
     if not main.lower().endswith(".py"):
         return False, "الملف الرئيسي يجب أن يكون ملف .py"
 
+    # فحص سريع قبل التشغيل: ملف فارغ أو ناقص = لن يعمل
+    try:
+        size = os.path.getsize(main_path)
+        with open(main_path, "r", encoding="utf-8", errors="replace") as f:
+            content_head = f.read()
+    except OSError as exc:
+        return False, f"تعذر قراءة الملف الرئيسي: {exc}"
+    lines = content_head.count("\n") + (1 if content_head and not content_head.endswith("\n") else 0)
+    if size == 0 or not content_head.strip():
+        return False, "الملف الرئيسي فارغ — ارفع الملف كاملًا أو الصق محتواه ثم احفظه"
+    code_lines = [ln for ln in content_head.splitlines()
+                  if ln.strip() and not ln.strip().startswith("#")]
+    if not code_lines:
+        return False, "الملف الرئيسي يحتوي تعليقات فقط بدون أي كود"
+    head = content_head[:4096]
+    if "run_polling" not in head and "run_forever" not in head and "asyncio.run" not in head \
+            and "while True" not in head and "idle()" not in head and "run_webhook" not in head:
+        logger.info("bot '%s': main file looks like a short script (no run loop detected)", name)
+
     stop_bot(name)
 
     log_path = os.path.join(path, "server.log")
     try:
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"\n[SYSTEM] بدء تشغيل جديد — {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"[SYSTEM] الملف الرئيسي: {main}\n")
+            f.write(f"[SYSTEM] الملف الرئيسي: {main} ({human_size(size)}) — {lines} سطر\n")
     except OSError:
         pass
 
@@ -465,6 +484,16 @@ def _monitor_once():
 
         if clean and ran_for < STABLE_SECONDS and not RESTART_ON_CLEAN_EXIT:
             # ملف ينتهي فورًا: إعادة تشغيله بلا فائدة — أوقف المحاولات واشرح السبب
+            main = (meta.get("main") or "").strip()
+            size_txt = lines_txt = ""
+            try:
+                mpath = safe_path(os.path.join(BOTS_DIR, name), main)
+                fsize = os.path.getsize(mpath)
+                with open(mpath, "r", encoding="utf-8", errors="replace") as fh:
+                    flines = fh.read().count("\n") + 1
+                size_txt, lines_txt = human_size(fsize), f"{flines} سطر"
+            except (ValueError, OSError):
+                pass
             meta["autorun"] = False
             meta["fails"] = {"count": 0, "first": 0, "last": 0}
             write_meta(name, meta)
@@ -472,8 +501,10 @@ def _monitor_once():
                 name,
                 f"[SYSTEM] انتهى الملف فورًا برمز خروج 0 (بعد {int(ran_for)} ثانية) — "
                 "غالبًا لا توجد به حلقة تشغيل دائمة، لذلك لن يُعاد تشغيله تلقائيًا.\n"
-                "[SYSTEM] تأكد من اختيار الملف الرئيسي الصحيح ★، وأن نهاية الملف "
-                "تشغّل البوت فعليًا (مثل application.run_polling()).\n"
+                + (f"[SYSTEM] حجم الملف الرئيسي: {size_txt} — {lines_txt}. "
+                   "لو الحجم صغير جدًا فالملف ناقص أو لم يُرفع كاملًا.\n" if size_txt else "")
+                + "[SYSTEM] افتح تبويب 📂 الملفات ← اضغط على الملف الرئيسي لمراجعة محتواه، "
+                "وتأكد أن نهايته تشغّل البوت فعليًا (مثل application.run_polling()).\n"
                 "[SYSTEM] لإعادة تشغيله عند كل انتهاء طبيعي: RESTART_ON_CLEAN_EXIT=1\n",
             )
             logger.info("monitor: '%s' exits instantly with code 0 — autorun disabled", name)
@@ -689,6 +720,52 @@ def api_create_bot():
     os.makedirs(path)
     write_meta(name, {"name": name, "main": "", "autorun": False})
     return jsonify({"success": True, "name": name})
+
+
+@app.route("/api/bots/<name>/check")
+@admin_required
+def api_check_bot(name):
+    """فحص سريع للملف الرئيسي: موجود؟ فارغ؟ فيه حلقة تشغيل؟"""
+    path = bot_dir(name)
+    if not path:
+        return fail("البوت غير موجود", 404)
+    meta = read_meta(name)
+    main = (meta.get("main") or "").strip()
+    result = {"success": True, "main": main, "exists": False, "size": 0, "lines": 0,
+              "has_loop": False, "problem": ""}
+    if not main:
+        result["problem"] = "لم يُحدَّد ملف رئيسي بعد — اضغط ★ بجانب ملف .py"
+        return jsonify(result)
+    try:
+        full = safe_path(path, main)
+    except ValueError:
+        result["problem"] = "مسار الملف غير صالح"
+        return jsonify(result)
+    if not os.path.isfile(full):
+        result["problem"] = "الملف الرئيسي غير موجود في مجلد البوت"
+        return jsonify(result)
+    result["exists"] = True
+    result["size"] = os.path.getsize(full)
+    try:
+        with open(full, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except OSError:
+        result["problem"] = "تعذر قراءة الملف"
+        return jsonify(result)
+    result["lines"] = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+    code_lines = [ln for ln in content.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    if not code_lines:
+        result["problem"] = "الملف فارغ أو تعليقات فقط"
+        return jsonify(result)
+    loop_markers = ("run_polling", "run_forever", "run_webhook", "asyncio.run",
+                    "while True", "idle()", "start_polling", "executor.start")
+    result["has_loop"] = any(m in content for m in loop_markers)
+    if not result["has_loop"]:
+        result["problem"] = (
+            "لا توجد حلقة تشغيل دائمة في الملف — سينتهي فورًا بعد التشغيل. "
+            "أضف في نهايته مثل: application.run_polling()"
+        )
+    return jsonify(result)
 
 
 @app.route("/api/bots/<name>/delete", methods=["POST"])
