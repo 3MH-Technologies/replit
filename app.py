@@ -15,6 +15,14 @@ HostBot — لوحة بسيطة لرفع وتشغيل ملفات Python.
     ADMIN_PASS   كلمة المرور (افتراضي: admin — عيّنها قبل النشر!)
     PORT         المنفذ (افتراضي: 7860)
     SECRET_KEY   مفتاح جلسات اختياري (يُشتق تلقائيًا إن لم يوجد)
+
+    --- الاستمرارية وتوزيع الضغط ---
+    BOT_NICE            أولوية البوتات (افتراضي 10 — أقل أولوية من اللوحة)
+    MONITOR_INTERVAL    كل كم ثانية يفحص المراقب البوتات (افتراضي 15)
+    MAX_FAILS           أقصى محاولات إعادة تشغيل متتالية (افتراضي 5)
+    KEEPALIVE_URL       رابط عام اختياري (مثل رابط Space) لنبضة الحياة
+    KEEPALIVE_INTERVAL  كل كم ثانية تُرسل النبضة (افتراضي 240)
+    MAX_BOT_MEM_MB      حد ذاكرة لكل بوت بالميغابايت (0 = بلا حد)
 """
 import hashlib
 import json
@@ -26,6 +34,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from functools import wraps
 
 import psutil
@@ -41,6 +50,15 @@ RUNNER = os.path.join(BASE_DIR, "runner.py")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin")
 PORT = int(os.environ.get("PORT") or os.environ.get("SERVER_PORT") or 7860)
+
+# --- الاستمرارية وتوزيع الضغط ---
+BOT_NICE = int(os.environ.get("BOT_NICE", "10"))                  # أولوية البوتات (أقل = أهم)
+MONITOR_INTERVAL = max(3, int(os.environ.get("MONITOR_INTERVAL", "15")))  # فحص كل كم ثانية
+STABLE_SECONDS = int(os.environ.get("STABLE_SECONDS", "120"))     # اعتبار البوت مستقرًا بعد
+MAX_FAILS = int(os.environ.get("MAX_FAILS", "5"))                 # أقصى محاولات إعادة تشغيل متتالية
+FAIL_WINDOW = 600                                                 # نافذة حساب الأعطال (10 دقائق)
+KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()       # رابط عام اختياري للنكزة
+KEEPALIVE_INTERVAL = max(60, int(os.environ.get("KEEPALIVE_INTERVAL", "240")))
 
 MAX_LOG_BYTES = 2 * 1024 * 1024     # يُقصّ السجل عند تجاوز هذا الحجم
 LOG_TAIL_BYTES = 128 * 1024         # ما يُعرض في الكونسول
@@ -130,9 +148,13 @@ def read_meta(name):
     try:
         with open(path, "r", encoding="utf-8") as f:
             loaded = json.load(f) or {}
-        meta.update({k: loaded.get(k, meta[k]) for k in meta})
+        if isinstance(loaded, dict):
+            meta.update(loaded)         # نحتفظ بحقول إضافية مثل عدّاد الأعطال
     except Exception:
         pass
+    meta["name"] = name
+    meta["main"] = str(meta.get("main") or "")
+    meta["autorun"] = bool(meta.get("autorun"))
     return meta
 
 
@@ -140,6 +162,14 @@ def write_meta(name, meta):
     path = os.path.join(BOTS_DIR, name, "meta.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def log_append(name, text):
+    try:
+        with open(os.path.join(BOTS_DIR, name, "server.log"), "a", encoding="utf-8") as f:
+            f.write(text)
+    except OSError:
+        pass
 
 
 def human_size(num):
@@ -224,8 +254,8 @@ def start_bot(name):
 
     log_path = os.path.join(path, "server.log")
     try:
-        with open(log_path, "w", encoding="utf-8") as f:
-            f.write(f"[SYSTEM] بدء تشغيل جديد — {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"\n[SYSTEM] بدء تشغيل جديد — {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"[SYSTEM] الملف الرئيسي: {main}\n")
     except OSError:
         pass
@@ -235,10 +265,17 @@ def start_bot(name):
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env.setdefault("PYTHONIOENCODING", "utf-8")
 
+    cmd = [sys.executable, "-u", RUNNER, main]
+    if os.name == "posix" and BOT_NICE > 0:
+        # البوتات بأولوية أقل حتى تبقى اللوحة مستجيبة تحت الضغط
+        nice_bin = shutil.which("nice")
+        if nice_bin:
+            cmd = [nice_bin, "-n", str(BOT_NICE)] + cmd
+
     try:
         logf = open(log_path, "ab")
         proc = subprocess.Popen(
-            [sys.executable, "-u", RUNNER, main],
+            cmd,
             cwd=path,
             stdin=subprocess.DEVNULL,
             stdout=logf,
@@ -304,6 +341,89 @@ def autorun_bots():
         if meta.get("autorun"):
             ok, msg = start_bot(name)
             logger.info("autorun '%s': %s %s", name, "ok" if ok else "skip", msg)
+            time.sleep(0.7)     # توزيع حمل الإقلاع بدل تشغيل كل البوتات دفعة واحدة
+
+
+def _monitor_once():
+    """جولة مراقبة: يعيد تشغيل أي بوت متوقف، ويحمي من حلقات الأعطال."""
+    try:
+        names = sorted(os.listdir(BOTS_DIR))
+    except OSError:
+        return
+    now = time.time()
+    for name in names:
+        if not os.path.isdir(os.path.join(BOTS_DIR, name)):
+            continue
+        meta = read_meta(name)
+        if not meta.get("autorun"):
+            continue
+        info = proc_info(name)
+        if info:
+            fails = meta.get("fails") or {}
+            if fails.get("count") and now - info["started"] >= STABLE_SECONDS:
+                meta["fails"] = {"count": 0, "first": 0, "last": 0}
+                write_meta(name, meta)
+                log_append(name, "[SYSTEM] البوت مستقر — تم تصفير عدّاد الأعطال.\n")
+            continue
+
+        # البوت مطلوب تشغيله لكنه متوقف → إعادة تشغيل تلقائية
+        fails = meta.get("fails") or {}
+        if not fails.get("first") or now - fails.get("first", 0) > FAIL_WINDOW:
+            fails = {"count": 0, "first": now, "last": 0}
+        if fails.get("count", 0) >= MAX_FAILS:
+            meta["autorun"] = False
+            meta["fails"] = fails
+            write_meta(name, meta)
+            log_append(
+                name,
+                "[SYSTEM] توقف البوت عدة مرات متتالية — تم إيقاف إعادة التشغيل "
+                "التلقائية. صلّح الخطأ ثم شغّله يدويًا.\n",
+            )
+            logger.warning("monitor: '%s' crash-loop — autorun disabled", name)
+            continue
+        # تأكد أن المستخدم لم يوقفه في هذه اللحظة
+        if not read_meta(name).get("autorun"):
+            continue
+        fails["count"] = fails.get("count", 0) + 1
+        fails["last"] = now
+        meta["fails"] = fails
+        write_meta(name, meta)
+        log_append(
+            name,
+            f"[SYSTEM] مراقب التشغيل: إعادة تشغيل تلقائية "
+            f"(محاولة {fails['count']}/{MAX_FAILS})\n",
+        )
+        ok, msg = start_bot(name)
+        if not ok:
+            log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
+        logger.info("monitor: restart '%s' -> %s %s", name, ok, msg)
+        time.sleep(0.7)         # توزيع حمل إعادة التشغيل
+
+
+def monitor_loop():
+    """مراقب دائم: البوتات لا تبقى متوقفة."""
+    time.sleep(5)
+    while True:
+        try:
+            _monitor_once()
+        except Exception as exc:      # لا نسمح للمراقب نفسه بالتوقف
+            logger.error("monitor error: %s", exc)
+        time.sleep(MONITOR_INTERVAL)
+
+
+def keepalive_loop():
+    """نبضة حياة دورية تمنع الاستضافات التي تنام عند الخمول من إيقاف اللوحة."""
+    time.sleep(15)
+    targets = [f"http://127.0.0.1:{PORT}/health"]
+    if KEEPALIVE_URL:
+        targets.append(KEEPALIVE_URL)
+    while True:
+        for target in targets:
+            try:
+                urllib.request.urlopen(target, timeout=15).read()
+            except Exception:
+                pass
+        time.sleep(KEEPALIVE_INTERVAL)
 
 
 _booted = False
@@ -315,6 +435,8 @@ def boot_once():
     if not _booted:
         _booted = True
         threading.Thread(target=autorun_bots, daemon=True).start()
+        threading.Thread(target=monitor_loop, daemon=True).start()
+        threading.Thread(target=keepalive_loop, daemon=True).start()
 
 
 # ---------------------------------------------------------------- الصفحات

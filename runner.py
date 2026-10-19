@@ -8,7 +8,8 @@ runner.py — يشغّل ملف البوت مع تثبيت تلقائي للمك
 الوظائف:
   1. تثبيت requirements.txt تلقائيًا عند تغيّره.
   2. إصلاح DNS (IPv4) لبيئة الحاويات.
-  3. إذا احتاج البوت مكتبة غير موجودة → pip install ثم إعادة التشغيل.
+  3. حد ذاكرة اختياري لكل بوت (MAX_BOT_MEM_MB) لتوزيع الموارد بعدل.
+  4. إذا احتاج البوت مكتبة غير موجودة → pip install ثم إعادة التشغيل.
 """
 import hashlib
 import os
@@ -157,6 +158,23 @@ def run_script(script):
             return 1
 
 
+def apply_limits():
+    """حد ذاكرة اختياري لكل بوت حتى لا يخنق بقية البوتات (0 = بلا حد)."""
+    try:
+        mb = int(os.environ.get("MAX_BOT_MEM_MB", "0") or 0)
+    except ValueError:
+        return
+    if mb <= 0:
+        return
+    try:
+        import resource
+        limit = mb * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+        print(f"[SYSTEM] حد الذاكرة لهذا البوت: {mb}MB", flush=True)
+    except Exception:
+        pass
+
+
 def main():
     if len(sys.argv) < 2:
         print("usage: python runner.py <script.py>")
@@ -164,6 +182,7 @@ def main():
     script = sys.argv[1]
     print(f"[SYSTEM] تشغيل {script} (pid={os.getpid()})", flush=True)
     ensure_requirements()
+    apply_limits()
     code = run_script(script)
     print(f"[SYSTEM] انتهى البوت (رمز الخروج {code})", flush=True)
     return code

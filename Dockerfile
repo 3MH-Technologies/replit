@@ -20,4 +20,8 @@ RUN pip install --no-cache-dir --upgrade pip -r requirements.txt
 COPY --chown=user . .
 
 EXPOSE 7860
-CMD ["gunicorn", "-b", "0.0.0.0:7860", "-w", "1", "--timeout", "600", "--graceful-timeout", "30", "app:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:7860", "-w", "1", "--threads", "16", "--timeout", "600", "--graceful-timeout", "30", "app:app"]
+
+# فحص صحة الحاوية: المنصّات التي تدعم HEALTHCHECK تعيد تشغيل الخدمة تلقائيًا عند توقفها
+HEALTHCHECK --interval=60s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/health', timeout=4)"
