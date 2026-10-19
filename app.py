@@ -19,7 +19,8 @@ HostBot — لوحة بسيطة لرفع وتشغيل ملفات Python.
     --- الاستمرارية وتوزيع الضغط ---
     BOT_NICE            أولوية البوتات (افتراضي 10 — أقل أولوية من اللوحة)
     MONITOR_INTERVAL    كل كم ثانية يفحص المراقب البوتات (افتراضي 15)
-    MAX_FAILS           أقصى محاولات إعادة تشغيل متتالية (افتراضي 5)
+    RESTART_DELAY_BASE  أول مهلة انتظار قبل إعادة تشغيل بوت خرج سريعًا (افتراضي 3)
+    RESTART_DELAY_MAX   أقصى مهلة بين محاولات إعادة التشغيل (افتراضي 60)
     KEEPALIVE_URL       رابط عام اختياري (مثل رابط Space) لنبضة الحياة
     KEEPALIVE_INTERVAL  كل كم ثانية تُرسل النبضة (افتراضي 240)
     MAX_BOT_MEM_MB      حد ذاكرة لكل بوت بالميغابايت (0 = بلا حد)
@@ -55,11 +56,11 @@ PORT = int(os.environ.get("PORT") or os.environ.get("SERVER_PORT") or 7860)
 BOT_NICE = int(os.environ.get("BOT_NICE", "10"))                  # أولوية البوتات (أقل = أهم)
 MONITOR_INTERVAL = max(3, int(os.environ.get("MONITOR_INTERVAL", "15")))  # فحص كل كم ثانية
 STABLE_SECONDS = int(os.environ.get("STABLE_SECONDS", "120"))     # اعتبار البوت مستقرًا بعد
-MAX_FAILS = int(os.environ.get("MAX_FAILS", "5"))                 # أقصى محاولات إعادة تشغيل متتالية
 FAIL_WINDOW = 600                                                 # نافذة حساب الأعطال (10 دقائق)
+RESTART_DELAY_BASE = max(1, int(os.environ.get("RESTART_DELAY_BASE", "3")))   # أول مهلة قبل إعادة تشغيل بوت خرج سريعًا
+RESTART_DELAY_MAX = max(10, int(os.environ.get("RESTART_DELAY_MAX", "60")))   # أقصى مهلة بين محاولات الإعادة
 KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()       # رابط عام اختياري للنكزة
 KEEPALIVE_INTERVAL = max(60, int(os.environ.get("KEEPALIVE_INTERVAL", "240")))
-RESTART_ON_CLEAN_EXIT = os.environ.get("RESTART_ON_CLEAN_EXIT", "0").lower() in ("1", "true", "yes", "on")
 
 MAX_LOG_BYTES = 2 * 1024 * 1024     # يُقصّ السجل عند تجاوز هذا الحجم
 LOG_TAIL_BYTES = 128 * 1024         # ما يُعرض في الكونسول
@@ -342,10 +343,6 @@ def _start_bot_locked(name):
                   if ln.strip() and not ln.strip().startswith("#")]
     if not code_lines:
         return False, "الملف الرئيسي يحتوي تعليقات فقط بدون أي كود"
-    head = content_head[:4096]
-    if "run_polling" not in head and "run_forever" not in head and "asyncio.run" not in head \
-            and "while True" not in head and "idle()" not in head and "run_webhook" not in head:
-        logger.info("bot '%s': main file looks like a short script (no run loop detected)", name)
 
     stop_bot(name)
 
@@ -388,6 +385,7 @@ def _start_bot_locked(name):
     write_pid(name, proc.pid)
     EXITS.pop(name, None)
     meta["autorun"] = True
+    meta["next_restart"] = 0     # تشغيل جديد يلغي أي موعد إعادة معلّق
     write_meta(name, meta)
     logger.info("started bot '%s' (pid=%s)", name, proc.pid)
     return True, ""
@@ -461,87 +459,74 @@ def _monitor_once():
             fails = meta.get("fails") or {}
             if fails.get("count") and now - info["started"] >= STABLE_SECONDS:
                 meta["fails"] = {"count": 0, "first": 0, "last": 0}
+                meta["restart_delay"] = 0
+                meta["next_restart"] = 0
                 write_meta(name, meta)
-                log_append(name, "[SYSTEM] البوت مستقر — تم تصفير عدّاد الأعطال.\n")
             continue
 
-        # البوت مطلوب تشغيله لكنه متوقف → ماذا حدث؟
+        # البوت مطلوب تشغيله لكنه متوقف → نعيده دائمًا (سلوك باقي المنصات):
+        # أي خروج — حتى برمز 0 — يعود له البوت، مع مهلة متصاعدة للملف الذي
+        # ينتهي فورًا حتى لا ندور بلا فائدة، والإيقاف النهائي يبقى يدويًا فقط.
         exit_info = EXITS.get(name) or {}
-        clean = bool(exit_info) and exit_info.get("code") == 0
+        code = exit_info.get("code")
         ran_for = max(0, exit_info.get("at", 0) - exit_info.get("started", 0)) if exit_info else 0
 
-        if clean and ran_for >= STABLE_SECONDS:
-            # عمل فترة محترمة ثم انتهى طبيعيًا → استمرارية: أعده تلقائيًا
+        if ran_for >= STABLE_SECONDS:
+            # عمل فترة كاملة ثم انتهى → استمرارية: نصفّر التأخير ونشغّله فورًا
             meta["fails"] = {"count": 0, "first": 0, "last": 0}
+            meta["restart_delay"] = 0
+            meta["next_restart"] = 0
             write_meta(name, meta)
-            log_append(name, "[SYSTEM] انتهى البوت طبيعيًا — إعادة تشغيل تلقائية للحفاظ على الاستمرارية.\n")
+            why = "طبيعيًا" if code == 0 else f"برمز خروج {code}"
+            log_append(
+                name,
+                f"[SYSTEM] انتهى البوت {why} بعد {int(ran_for)} ثانية عمل — "
+                "إعادة تشغيل تلقائية.\n",
+            )
             ok, msg = start_bot(name, only_if_stopped=True)
             if not ok:
                 log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
-            logger.info("monitor: clean exit restart '%s' -> %s %s", name, ok, msg)
+            logger.info("monitor: restart '%s' -> %s %s", name, ok, msg)
             time.sleep(0.7)
             continue
 
-        if clean and ran_for < STABLE_SECONDS and not RESTART_ON_CLEAN_EXIT:
-            # ملف ينتهي فورًا: إعادة تشغيله بلا فائدة — أوقف المحاولات واشرح السبب
-            main = (meta.get("main") or "").strip()
-            size_txt = lines_txt = ""
-            try:
-                mpath = safe_path(os.path.join(BOTS_DIR, name), main)
-                fsize = os.path.getsize(mpath)
-                with open(mpath, "r", encoding="utf-8", errors="replace") as fh:
-                    flines = fh.read().count("\n") + 1
-                size_txt, lines_txt = human_size(fsize), f"{flines} سطر"
-            except (ValueError, OSError):
-                pass
-            meta["autorun"] = False
-            meta["fails"] = {"count": 0, "first": 0, "last": 0}
+        next_at = float(meta.get("next_restart") or 0)
+        if now < next_at:
+            continue             # ما زلنا داخل مهلة الانتظار قبل الإعادة المجدولة
+
+        if next_at:
+            # حان موعد الإعادة المقررة → شغّله الآن (الشغيل يلغي الموعد نفسه)
+            meta["next_restart"] = 0
             write_meta(name, meta)
-            log_append(
-                name,
-                f"[SYSTEM] انتهى الملف فورًا برمز خروج 0 (بعد {int(ran_for)} ثانية) — "
-                "غالبًا لا توجد به حلقة تشغيل دائمة، لذلك لن يُعاد تشغيله تلقائيًا.\n"
-                + (f"[SYSTEM] حجم الملف الرئيسي: {size_txt} — {lines_txt}. "
-                   "لو الحجم صغير جدًا فالملف ناقص أو لم يُرفع كاملًا.\n" if size_txt else "")
-                + "[SYSTEM] افتح تبويب 📂 الملفات ← اضغط على الملف الرئيسي لمراجعة محتواه، "
-                "وتأكد أن نهايته تشغّل البوت فعليًا (مثل application.run_polling()).\n"
-                "[SYSTEM] لإعادة تشغيله عند كل انتهاء طبيعي: RESTART_ON_CLEAN_EXIT=1\n",
-            )
-            logger.info("monitor: '%s' exits instantly with code 0 — autorun disabled", name)
+            ok, msg = start_bot(name, only_if_stopped=True)
+            if not ok:
+                log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
+            logger.info("monitor: scheduled restart '%s' -> %s %s", name, ok, msg)
+            time.sleep(0.7)
             continue
 
-        # إعادة تشغيل تلقائية بعد انهيار (أو انتهاء طبيعي بعد عمل مستقر)
+        # خروج سريع لم تُجدول له مهلة بعد → مهلة متصاعدة 3 → 6 → 12 → 24 → 48 → 60ث
         fails = meta.get("fails") or {}
         if not fails.get("first") or now - fails.get("first", 0) > FAIL_WINDOW:
             fails = {"count": 0, "first": now, "last": 0}
-        if fails.get("count", 0) >= MAX_FAILS:
-            meta["autorun"] = False
-            meta["fails"] = fails
-            write_meta(name, meta)
-            log_append(
-                name,
-                "[SYSTEM] توقف البوت عدة مرات متتالية — تم إيقاف إعادة التشغيل "
-                "التلقائية. صلّح الخطأ ثم شغّله يدويًا.\n",
-            )
-            logger.warning("monitor: '%s' crash-loop — autorun disabled", name)
-            continue
-        # تأكد أن المستخدم لم يوقفه في هذه اللحظة
-        if not read_meta(name).get("autorun"):
-            continue
         fails["count"] = fails.get("count", 0) + 1
         fails["last"] = now
+
+        prev_delay = int(meta.get("restart_delay") or 0)
+        delay = min(RESTART_DELAY_MAX,
+                    RESTART_DELAY_BASE if not prev_delay else prev_delay * 2)
         meta["fails"] = fails
+        meta["restart_delay"] = delay
+        meta["next_restart"] = now + delay
         write_meta(name, meta)
+        why = (f"برمز خروج 0 بعد {int(ran_for)} ثانية"
+               if code == 0 else f"برمز خروج {code} بعد {int(ran_for)} ثانية")
         log_append(
             name,
-            f"[SYSTEM] مراقب التشغيل: إعادة تشغيل تلقائية "
-            f"(محاولة {fails['count']}/{MAX_FAILS})\n",
+            f"[SYSTEM] انتهى البوت {why} — إعادة تشغيل تلقائية بعد {delay} ثانية "
+            f"(محاولة {fails['count']}). الإيقاف النهائي يكون بزر «إيقاف» فقط.\n",
         )
-        ok, msg = start_bot(name, only_if_stopped=True)
-        if not ok:
-            log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
-        logger.info("monitor: restart '%s' -> %s %s", name, ok, msg)
-        time.sleep(0.7)         # توزيع حمل إعادة التشغيل
+        logger.info("monitor: quick exit '%s' — next restart in %ss", name, delay)
 
 
 def monitor_loop():
@@ -762,8 +747,9 @@ def api_check_bot(name):
     result["has_loop"] = any(m in content for m in loop_markers)
     if not result["has_loop"]:
         result["problem"] = (
-            "لا توجد حلقة تشغيل دائمة في الملف — سينتهي فورًا بعد التشغيل. "
-            "أضف في نهايته مثل: application.run_polling()"
+            "لا توجد حلقة تشغيل دائمة في الملف — سيعمل ثم يخرج فورًا، وستعيد "
+            "المراقبة تشغيله تلقائيًا كل دقيقة تقريبًا بدل بقائه شغّالًا. "
+            "لتشغيل دائم أضف في نهايته مثل: application.run_polling()"
         )
     return jsonify(result)
 

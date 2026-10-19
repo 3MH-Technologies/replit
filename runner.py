@@ -128,6 +128,11 @@ def fix_and_install(module):
 
 
 def run_script(script):
+    """تشغيل طبيعي تمامًا مثل: python script.py — نفس السلوك، نفس رسائل
+    الخطأ، ونفس كود الخروج الأصلي (SystemExit وأخواتها تمر كما هي).
+
+    الفرق الوحيد: لو احتاج الملف مكتبة غير مثبتة نثبتها من pip ونعيد التشغيل.
+    """
     import runpy
 
     script_dir = os.path.dirname(os.path.abspath(script))
@@ -140,10 +145,6 @@ def run_script(script):
         try:
             runpy.run_path(script, run_name="__main__")
             return 0
-        except SystemExit as exc:
-            return exc.code if isinstance(exc.code, int) else 0
-        except KeyboardInterrupt:
-            return 0
         except (ModuleNotFoundError, ImportError) as exc:
             module = missing_module_name(exc)
             package = IMPORT_TO_PACKAGE.get((module or "").split(".")[0], module)
@@ -153,9 +154,6 @@ def run_script(script):
                     installed.add(package)
                     print(f"[SETUP] تم تثبيت {package} — إعادة تشغيل البوت…", flush=True)
                     continue
-            traceback.print_exc()
-            return 1
-        except BaseException:
             traceback.print_exc()
             return 1
 
