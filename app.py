@@ -172,6 +172,64 @@ def log_append(name, text):
         pass
 
 
+def _pid_path(name):
+    return os.path.join(BOTS_DIR, name, ".pid")
+
+
+def write_pid(name, pid):
+    try:
+        with open(_pid_path(name), "w", encoding="utf-8") as f:
+            f.write(str(pid))
+    except OSError:
+        pass
+
+
+def clear_pid(name):
+    try:
+        os.remove(_pid_path(name))
+    except OSError:
+        pass
+
+
+class AdoptedProcess:
+    """عملية بوت ما زالت تعمل من جلسة سابقة (أُعيد تشغيل اللوحة وحدها دون الحاوية)."""
+
+    def __init__(self, proc):
+        self._proc = proc
+        self.pid = proc.pid
+
+    def poll(self):
+        try:
+            if self._proc.is_running() and self._proc.status() != psutil.STATUS_ZOMBIE:
+                return None
+        except psutil.Error:
+            pass
+        return 0
+
+
+def adopt_running_bot(name):
+    """يعيد تبنّي بوت يعمل فعلًا (حسب ملف .pid) حتى لا يُشغَّل مرتين."""
+    try:
+        with open(_pid_path(name), "r", encoding="utf-8") as f:
+            pid = int((f.read() or "").strip() or 0)
+    except (OSError, ValueError):
+        return None
+    if pid <= 0 or pid == os.getpid():
+        return None
+    try:
+        proc = psutil.Process(pid)
+        if not any(RUNNER in str(part) for part in proc.cmdline()):
+            return None
+        bot_path = os.path.abspath(os.path.join(BOTS_DIR, name))
+        if os.path.abspath(proc.cwd()) != bot_path:
+            return None
+        started = proc.create_time()
+    except (psutil.Error, OSError):
+        return None
+    logger.info("adopted running bot '%s' (pid=%s)", name, pid)
+    return {"proc": AdoptedProcess(proc), "started": started}
+
+
 def human_size(num):
     num = float(num)
     for unit in ("B", "KB", "MB", "GB"):
@@ -183,16 +241,22 @@ def human_size(num):
 # ------------------------------------------------- تشغيل / إيقاف العمليات
 
 def proc_info(name):
-    """يرجع معلومات العملية إن كانت تعمل فعلًا."""
+    """يرجع معلومات العملية إن كانت تعمل فعلًا (ويتبنّى بوتًا نجا من إعادة تشغيل اللوحة)."""
     with PROCS_LOCK:
         info = PROCS.get(name)
-    if not info:
-        return None
-    if info["proc"].poll() is not None:
+    if info:
+        if info["proc"].poll() is not None:
+            with PROCS_LOCK:
+                PROCS.pop(name, None)
+            clear_pid(name)
+        else:
+            return info
+    adopted = adopt_running_bot(name)
+    if adopted:
         with PROCS_LOCK:
-            PROCS.pop(name, None)
-        return None
-    return info
+            PROCS[name] = adopted
+        return adopted
+    return None
 
 
 def is_running(name):
@@ -228,6 +292,7 @@ def stop_bot(name, set_autorun=False):
         info = PROCS.pop(name, None)
     if info:
         kill_tree(info["proc"])
+    clear_pid(name)
     meta = read_meta(name)
     if meta.get("autorun") and set_autorun:
         meta["autorun"] = False
@@ -288,6 +353,7 @@ def start_bot(name):
 
     with PROCS_LOCK:
         PROCS[name] = {"proc": proc, "started": time.time()}
+    write_pid(name, proc.pid)
     meta["autorun"] = True
     write_meta(name, meta)
     logger.info("started bot '%s' (pid=%s)", name, proc.pid)
@@ -644,7 +710,7 @@ def api_files(name):
 
     dirs, files = [], []
     for entry in sorted(os.listdir(base), key=lambda x: x.lower()):
-        if rel == "" and entry in ("meta.json", "server.log", ".req_sha"):
+        if rel == "" and entry in ("meta.json", "server.log", ".req_sha", ".pid"):
             continue
         full = os.path.join(base, entry)
         if os.path.isdir(full):

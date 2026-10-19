@@ -10,6 +10,8 @@ runner.py — يشغّل ملف البوت مع تثبيت تلقائي للمك
   2. إصلاح DNS (IPv4) لبيئة الحاويات.
   3. حد ذاكرة اختياري لكل بوت (MAX_BOT_MEM_MB) لتوزيع الموارد بعدل.
   4. إذا احتاج البوت مكتبة غير موجودة → pip install ثم إعادة التشغيل.
+  5. إخفاء ثرثرة المكتبات (httpx/telegram/aiohttp…) وإظهار مخرجات ملف البوت فقط
+     (أعِدها بـ SHOW_LIB_LOGS=1).
 """
 import hashlib
 import os
@@ -175,6 +177,26 @@ def apply_limits():
         pass
 
 
+# مكتبات تُغرق الكونسول بثرثرة (httpx / telegram / aiohttp …) —
+# تبقى تحذيراتها فقط، أما مخرجات ملف البوت فتظهر كاملة.
+NOISY_LOGGERS = (
+    "httpx", "httpcore", "h11", "h2", "anyio",
+    "urllib3", "requests", "aiohttp", "asyncio", "websockets",
+    "telegram", "telethon", "pyrogram", "discord",
+    "proxyscrape", "apscheduler", "PIL", "openai",
+    "charset_normalizer", "filelock",
+)
+
+
+def quiet_library_logs():
+    """يعرض مخرجات ملف البوت فقط، ويخفي ثرثرة المكتبات (أعِدها بـ SHOW_LIB_LOGS=1)."""
+    if os.environ.get("SHOW_LIB_LOGS", "0").strip().lower() in ("1", "true", "yes", "on"):
+        return
+    import logging
+    for logger_name in NOISY_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
 def main():
     if len(sys.argv) < 2:
         print("usage: python runner.py <script.py>")
@@ -183,6 +205,7 @@ def main():
     print(f"[SYSTEM] تشغيل {script} (pid={os.getpid()})", flush=True)
     ensure_requirements()
     apply_limits()
+    quiet_library_logs()
     code = run_script(script)
     print(f"[SYSTEM] انتهى البوت (رمز الخروج {code})", flush=True)
     return code

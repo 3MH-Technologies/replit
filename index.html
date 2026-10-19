@@ -127,6 +127,7 @@
     <div class="pane" id="paneLogs" hidden>
       <div class="pane-toolbar">
         <button class="btn small" id="btnClearLog">🧹 تفريغ السجل</button>
+        <button class="btn small" id="btnCopyLog">📋 نسخ السجل</button>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
           <input type="checkbox" id="autoScroll" checked> تتبع تلقائي
         </label>
@@ -436,6 +437,33 @@ async function pollLog(){
 $('btnClearLog').addEventListener('click', async () => {
   try { await act('/api/bots/' + encodeURIComponent(state.current) + '/log/clear'); toast('تم تفريغ السجل', 'ok'); pollLog(); }
   catch(ex){ toast(ex.message, 'err'); }
+});
+$('btnCopyLog').addEventListener('click', async () => {
+  const text = $('logBox').textContent || '';
+  if (!text.trim() || text === '…' || text === '(لا يوجد سجل بعد)'){
+    toast('لا يوجد سجل لنسخه', 'err');
+    return;
+  }
+  let done = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+      done = true;
+    }
+  } catch(ex){ done = false; }
+  if (!done){
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { done = document.execCommand('copy'); } catch(ex){ done = false; }
+    ta.remove();
+  }
+  toast(done ? 'تم نسخ السجل' : 'تعذر النسخ — حدّد النص وانسخه يدويًا', done ? 'ok' : 'err');
 });
 
 /* ---------- quick upload / new bot ---------- */
