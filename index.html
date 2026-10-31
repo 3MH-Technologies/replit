@@ -890,7 +890,8 @@ async function uploadToCurrentBot(files){
 
 $('btnUploadHere').addEventListener('click', () => $('botUploadInput').click());
 $('botUploadInput').addEventListener('change', async (e) => {
-  const files = e.target.files;
+  // انسخ الملفات أولًا — تفريغ value يفرّغ FileList أيضًا
+  const files = Array.from(e.target.files);
   e.target.value = '';
   await uploadToCurrentBot(files);
 });
@@ -1065,9 +1066,10 @@ async function quickUpload(files){
 
 $('btnQuick').addEventListener('click', () => $('quickInput').click());
 $('quickInput').addEventListener('change', async (e) => {
-  const files = e.target.files;
+  // انسخ الملفات أولًا — تفريغ value يفرّغ FileList أيضًا
+  const files = Array.from(e.target.files);
   e.target.value = '';
-  if (!files || !files.length) { toast('لم تُختر أي ملف', 'err'); return; }
+  if (!files.length) { toast('لم تُختر أي ملف', 'err'); return; }
   toast('تم اختيار ' + files.length + ' ملف', 'ok', 3000);
   await quickUpload(files);
 });
