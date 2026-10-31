@@ -1,0 +1,16 @@
+checked_at=2026-10-31T20:57:51Z
+launched_cmd=python3 app.py
+alive=yes
+status=running
+ports=53 2000 2222 7860 12563 13005 16634 16635 16636 35153 43005 
+http_7860=302
+--- app log tail ---
+[2026-10-31 20:57:51] INFO: HostBot — http://0.0.0.0:7860  (admin user: admin)
+ * Serving Flask app 'app'
+ * Debug mode: off
+[2026-10-31 20:57:51] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:7860
+ * Running on http://10.0.1.155:7860
+[2026-10-31 20:57:51] INFO: [33mPress CTRL+C to quit[0m
+[2026-10-31 20:58:02] INFO: 127.0.0.1 - - [31/Oct/2026 20:58:02] "[32mGET / HTTP/1.1[0m" 302 -
