@@ -1,0 +1,37 @@
+{
+  "forwardPorts": [
+    3000,
+    5000,
+    7860,
+    8000,
+    8080,
+    8501
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "app-3000",
+      "visibility": "public"
+    },
+    "5000": {
+      "label": "app-5000",
+      "visibility": "public"
+    },
+    "7860": {
+      "label": "app-7860",
+      "visibility": "public"
+    },
+    "8000": {
+      "label": "app-8000",
+      "visibility": "public"
+    },
+    "8080": {
+      "label": "app-8080",
+      "visibility": "public"
+    },
+    "8501": {
+      "label": "app-8501",
+      "visibility": "public"
+    }
+  },
+  "postStartCommand": "bash .devcontainer/zero-start.sh"
+}
