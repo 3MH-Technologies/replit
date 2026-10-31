@@ -815,7 +815,7 @@ def boot_once():
 @app.route("/")
 def page_index():
     if not session.get("admin"):
-        return redirect("/login")
+        return send_from_directory(BASE_DIR, "landing.html")
     return send_from_directory(BASE_DIR, "index.html")
 
 
