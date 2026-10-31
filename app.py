@@ -92,16 +92,6 @@ logging.basicConfig(
     format="[%(asctime)s] %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-
-
-class _DropDevServerWarning(logging.Filter):
-    """إخفاء تحذير 'development server' من Werkzeug — اللوحة تُنشر عبر gunicorn/Docker."""
-    def filter(self, record):
-        msg = record.getMessage().lower()
-        return "development server" not in msg
-
-
-logging.getLogger("werkzeug").addFilter(_DropDevServerWarning())
 logger = logging.getLogger("hostbot")
 
 app = Flask(__name__)
@@ -201,13 +191,11 @@ def validate_rel_path(rel, allow_empty=False):
 
 
 def safe_path(bot_path, rel):
-    """يمنع أي خروج عن مجلد البوت (path traversal) ويتعامل مع الروابط الرمزية."""
+    """يمنع أي خروج عن مجلد البوت (path traversal)."""
     rel = (rel or "").replace("\\", "/").strip().lstrip("/")
-    root = os.path.realpath(bot_path)
-    joined = os.path.realpath(os.path.join(root, rel))
-    root_cmp = os.path.normcase(root)
-    joined_cmp = os.path.normcase(joined)
-    if joined_cmp != root_cmp and not joined_cmp.startswith(root_cmp + os.sep):
+    root = os.path.abspath(bot_path)
+    joined = os.path.abspath(os.path.join(root, rel))
+    if joined != root and not joined.startswith(root + os.sep):
         raise ValueError("مسار غير صالح")
     return joined
 
@@ -357,9 +345,6 @@ def flatten_single_root(dest_dir):
     except OSError:
         return
     if not children:
-        return
-    # لا نرفع محتوى الأرشيف للجذر إن كان يحتوي ملفات داخلية أو روابط رمزية
-    if any(child.name in INTERNAL_FILES or child.is_symlink() for child in children):
         return
     if any(os.path.exists(os.path.join(dest_dir, child.name)) for child in children):
         return
@@ -1079,8 +1064,7 @@ def api_extract(name):
         return fail("مسار غير صالح")
     if not os.path.isfile(archive) or not archive.lower().endswith(".zip"):
         return fail("الملف ليس أرشيف ZIP", 404)
-    protect_root = os.path.normcase(os.path.realpath(os.path.dirname(archive))) == \
-        os.path.normcase(os.path.realpath(path))
+    protect_root = os.path.abspath(os.path.dirname(archive)) == os.path.abspath(path)
     count, skipped, error = safe_extract_zip(archive, os.path.dirname(archive),
                                              protect_root=protect_root)
     if error:
@@ -1237,7 +1221,7 @@ def api_file_delete(name):
         full = safe_path(path, rel)
     except ValueError:
         return fail("مسار غير صالح")
-    if os.path.normcase(full) == os.path.normcase(os.path.realpath(path)):
+    if full == os.path.abspath(path):
         return fail("لا يمكن حذف مجلد البوت نفسه")
     try:
         if kind == "dir":
@@ -1270,8 +1254,7 @@ def save_uploaded_files(name, path, files, rel=""):
             os.close(fd)
             try:
                 f.save(tmp_path)
-                protect_root = os.path.normcase(os.path.realpath(target)) == \
-                    os.path.normcase(os.path.realpath(path))
+                protect_root = os.path.abspath(target) == os.path.abspath(path)
                 count, skip, error = safe_extract_zip(
                     tmp_path, target, protect_root=protect_root
                 )
@@ -1288,8 +1271,7 @@ def save_uploaded_files(name, path, files, rel=""):
                     pass
             continue
 
-        if os.path.normcase(os.path.realpath(target)) == \
-                os.path.normcase(os.path.realpath(path)) and filename in INTERNAL_FILES:
+        if os.path.abspath(target) == os.path.abspath(path) and filename in INTERNAL_FILES:
             skipped.append(filename + " (ملف داخلي محمي)")
             continue
         dest = os.path.join(target, filename)

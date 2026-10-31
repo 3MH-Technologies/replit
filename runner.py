@@ -235,8 +235,8 @@ def main():
         return 2
     script = sys.argv[1]
     print(f"[SYSTEM] تشغيل {script} (pid={os.getpid()})", flush=True)
-    load_dotenv()
     ensure_requirements()
+    load_dotenv()
     apply_limits()
     quiet_library_logs()
     code = run_script(script)
