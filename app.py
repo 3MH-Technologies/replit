@@ -92,6 +92,16 @@ logging.basicConfig(
     format="[%(asctime)s] %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+
+
+class _DropDevServerWarning(logging.Filter):
+    """إخفاء تحذير 'development server' من Werkzeug — اللوحة تُنشر عبر gunicorn/Docker."""
+    def filter(self, record):
+        msg = record.getMessage().lower()
+        return "development server" not in msg
+
+
+logging.getLogger("werkzeug").addFilter(_DropDevServerWarning())
 logger = logging.getLogger("hostbot")
 
 app = Flask(__name__)
