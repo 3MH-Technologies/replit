@@ -1063,6 +1063,8 @@ $('btnQuick').addEventListener('click', () => $('quickInput').click());
 $('quickInput').addEventListener('change', async (e) => {
   const files = e.target.files;
   e.target.value = '';
+  if (!files || !files.length) { toast('لم تُختر أي ملف', 'err'); return; }
+  toast('تم اختيار ' + files.length + ' ملف', 'ok', 3000);
   await quickUpload(files);
 });
 
