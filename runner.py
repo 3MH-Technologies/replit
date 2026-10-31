@@ -7,10 +7,11 @@ runner.py — يشغّل ملف البوت مع تثبيت تلقائي للمك
 
 الوظائف:
   1. تثبيت requirements.txt تلقائيًا عند تغيّره.
-  2. إصلاح DNS (IPv4) لبيئة الحاويات.
-  3. حد ذاكرة اختياري لكل بوت (MAX_BOT_MEM_MB) لتوزيع الموارد بعدل.
-  4. إذا احتاج البوت مكتبة غير موجودة → pip install ثم إعادة التشغيل.
-  5. إخفاء ثرثرة المكتبات (httpx/telegram/aiohttp…) وإظهار مخرجات ملف البوت فقط
+  2. تحميل متغيرات .env من مجلد البوت.
+  3. إصلاح DNS (IPv4) لبيئة الحاويات.
+  4. حد ذاكرة اختياري لكل بوت (MAX_BOT_MEM_MB) لتوزيع الموارد بعدل.
+  5. إذا احتاج البوت مكتبة غير موجودة → pip install ثم إعادة التشغيل.
+  6. إخفاء ثرثرة المكتبات (httpx/telegram/aiohttp…) وإظهار مخرجات ملف البوت فقط
      (أعِدها بـ SHOW_LIB_LOGS=1).
 """
 import hashlib
@@ -23,7 +24,7 @@ import traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 try:
-    import dns_fix  # noqa: F401  (يصلح مشاكل الاتصال داخل حاويات HF)
+    import dns_fix  # noqa: F401  (يصلح مشاكل الاتصال داخل بيئات الحاويات)
 except Exception:
     pass
 
@@ -128,6 +129,11 @@ def fix_and_install(module):
 
 
 def run_script(script):
+    """تشغيل طبيعي تمامًا مثل: python script.py — نفس السلوك، نفس رسائل
+    الخطأ، ونفس كود الخروج الأصلي (SystemExit وأخواتها تمر كما هي).
+
+    الفرق الوحيد: لو احتاج الملف مكتبة غير مثبتة نثبتها من pip ونعيد التشغيل.
+    """
     import runpy
 
     script_dir = os.path.dirname(os.path.abspath(script))
@@ -140,10 +146,6 @@ def run_script(script):
         try:
             runpy.run_path(script, run_name="__main__")
             return 0
-        except SystemExit as exc:
-            return exc.code if isinstance(exc.code, int) else 0
-        except KeyboardInterrupt:
-            return 0
         except (ModuleNotFoundError, ImportError) as exc:
             module = missing_module_name(exc)
             package = IMPORT_TO_PACKAGE.get((module or "").split(".")[0], module)
@@ -155,9 +157,39 @@ def run_script(script):
                     continue
             traceback.print_exc()
             return 1
-        except BaseException:
-            traceback.print_exc()
-            return 1
+
+
+def load_dotenv():
+    """يحمّل ملف .env من مجلد البوت دون تجاوز متغيرات البيئة الموجودة."""
+    path = os.path.join(os.getcwd(), ".env")
+    if not os.path.isfile(path):
+        return
+    loaded = 0
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[7:].lstrip()
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if not key or key in os.environ:
+                    continue
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                    value = value[1:-1]
+                elif " #" in value:
+                    value = value.split(" #", 1)[0].strip()
+                os.environ[key] = value
+                loaded += 1
+    except OSError:
+        return
+    if loaded:
+        print(f"[SYSTEM] تم تحميل {loaded} متغيرًا من .env", flush=True)
 
 
 def apply_limits():
@@ -204,6 +236,7 @@ def main():
     script = sys.argv[1]
     print(f"[SYSTEM] تشغيل {script} (pid={os.getpid()})", flush=True)
     ensure_requirements()
+    load_dotenv()
     apply_limits()
     quiet_library_logs()
     code = run_script(script)

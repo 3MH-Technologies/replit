@@ -10,6 +10,7 @@ env/
 # أسرار ومتغيرات بيئة
 .env
 .env.*
+!.env.example
 
 # سجلات
 *.log

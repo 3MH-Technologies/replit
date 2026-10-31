@@ -4,51 +4,123 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#080c11">
 <title>HostBot — تسجيل الدخول</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐳</text></svg>">
 <style>
-  :root{--bg:#0b0f14;--card:#151c26;--border:#26303d;--text:#e6edf3;--muted:#8b98a5;--accent:#3b82f6;--red:#ef4444}
+  :root{
+    --bg:#080c11;--card:#121a24;--card2:#17212d;--border:#243244;--text:#e8eef5;
+    --muted:#8ea0b5;--muted2:#64748b;--accent:#4f8cff;--accent2:#7c5cff;--red:#ff6b6b
+  }
   *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1200px 600px at 70% -10%,#16233a 0%,var(--bg) 55%);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif}
-  .card{width:min(400px,92vw);background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
-  .logo{font-size:40px;text-align:center}
-  h1{margin:12px 0 4px;font-size:22px;text-align:center}
-  .sub{margin:0 0 24px;text-align:center;color:var(--muted);font-size:13px}
-  label{display:block;margin:14px 0 6px;font-size:13px;color:var(--muted)}
-  input{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:#0e141c;color:var(--text);font-size:15px;outline:none}
-  input:focus{border-color:var(--accent)}
-  button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;cursor:pointer}
-  button:disabled{opacity:.6;cursor:wait}
-  .err{margin-top:14px;color:var(--red);font-size:13px;text-align:center;min-height:18px}
+  body{
+    margin:0;min-height:100vh;display:grid;place-items:center;padding:18px;
+    background:
+      radial-gradient(800px 500px at 80% -10%,rgba(79,140,255,.18),transparent 60%),
+      radial-gradient(600px 450px at 15% 5%,rgba(124,92,255,.14),transparent 55%),
+      var(--bg);
+    color:var(--text);font-family:"Segoe UI",Tahoma,system-ui,-apple-system,Arial,sans-serif
+  }
+  .card{
+    width:min(410px,94vw);background:linear-gradient(180deg,rgba(23,33,45,.95),rgba(18,26,36,.98));
+    border:1px solid var(--border);border-radius:22px;padding:30px 28px 26px;
+    box-shadow:0 30px 80px rgba(0,0,0,.55);position:relative;overflow:hidden
+  }
+  .card::before{
+    content:"";position:absolute;inset:0 0 auto;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(79,140,255,.65),transparent)
+  }
+  .logo{
+    width:64px;height:64px;margin:0 auto 14px;border-radius:20px;display:grid;place-items:center;
+    font-size:32px;background:linear-gradient(145deg,rgba(79,140,255,.22),rgba(124,92,255,.16));
+    border:1px solid rgba(79,140,255,.35);box-shadow:0 12px 34px rgba(79,140,255,.22)
+  }
+  h1{margin:0;font-size:23px;text-align:center;letter-spacing:.2px}
+  .sub{margin:6px 0 24px;text-align:center;color:var(--muted);font-size:12.5px}
+  label{display:block;margin:14px 0 6px;font-size:12.5px;color:var(--muted)}
+  .field{position:relative}
+  input{
+    width:100%;padding:11px 13px;border-radius:11px;border:1px solid var(--border);
+    background:#0a1018;color:var(--text);font-size:14.5px;outline:none;transition:.16s
+  }
+  input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,140,255,.13)}
+  .field input{padding-inline-end:42px}
+  .eye{
+    position:absolute;inset-inline-end:7px;top:50%;transform:translateY(-50%);
+    background:transparent;border:0;color:var(--muted);font-size:16px;padding:6px;cursor:pointer;border-radius:8px
+  }
+  .eye:hover{color:var(--text);background:var(--card2)}
+  button.submit{
+    width:100%;margin-top:22px;padding:12px;border:0;border-radius:11px;
+    background:linear-gradient(135deg,var(--accent),#3d6fe0);color:#fff;font-size:15px;font-weight:650;
+    cursor:pointer;box-shadow:0 10px 24px rgba(79,140,255,.25);transition:.16s
+  }
+  button.submit:hover{filter:brightness(1.07)}
+  button.submit:disabled{opacity:.6;cursor:wait}
+  .err{margin-top:13px;color:#ffb4b4;font-size:12.5px;text-align:center;min-height:18px;line-height:1.6}
+  .foot{
+    margin-top:22px;padding-top:16px;border-top:1px solid var(--border);
+    text-align:center;color:var(--muted2);font-size:11px;line-height:1.8
+  }
+  .foot b{color:var(--muted)}
+  .badge{
+    display:inline-flex;align-items:center;gap:5px;margin-top:2px;padding:3px 9px;
+    border:1px solid rgba(45,212,167,.25);background:rgba(45,212,167,.07);color:#8df5d8;
+    border-radius:999px;font-size:10.5px
+  }
 </style>
 </head>
 <body>
-  <form class="card" id="form">
+  <form class="card" id="form" autocomplete="on">
     <div class="logo">🐳</div>
     <h1>HostBot</h1>
-    <p class="sub">لوحة رفع وتشغيل ملفات Python</p>
+    <p class="sub">منصة استضافة وتشغيل بوتات Python</p>
+
     <label for="u">اسم المستخدم</label>
-    <input id="u" name="username" autocomplete="username" required>
+    <input id="u" name="username" autocomplete="username" required autofocus>
+
     <label for="p">كلمة المرور</label>
-    <input id="p" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit" id="btn">دخول</button>
-    <div class="err" id="err"></div>
+    <div class="field">
+      <input id="p" name="password" type="password" autocomplete="current-password" required>
+      <button type="button" class="eye" id="eye" aria-label="إظهار كلمة المرور">👁</button>
+    </div>
+
+    <button type="submit" class="submit" id="btn">دخول إلى اللوحة</button>
+    <div class="err" id="err" role="alert"></div>
+
+    <div class="foot">
+      <span class="badge">🔒 جلسة محمية</span><br>
+      <b>HostBot</b> · إدارة بوتات Python بسهولة
+    </div>
   </form>
+
 <script>
 const form = document.getElementById('form');
 const btn = document.getElementById('btn');
 const err = document.getElementById('err');
+const pass = document.getElementById('p');
+const eye = document.getElementById('eye');
+
+eye.addEventListener('click', () => {
+  const show = pass.type === 'password';
+  pass.type = show ? 'text' : 'password';
+  eye.textContent = show ? '🙈' : '👁';
+  eye.setAttribute('aria-label', show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
+  pass.focus();
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   err.textContent = '';
   btn.disabled = true;
+  btn.textContent = 'جارٍ التحقق…';
   try {
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         username: document.getElementById('u').value,
-        password: document.getElementById('p').value
+        password: pass.value
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -58,6 +130,7 @@ form.addEventListener('submit', async (e) => {
     err.textContent = 'تعذر الاتصال بالخادم';
   }
   btn.disabled = false;
+  btn.textContent = 'دخول إلى اللوحة';
 });
 </script>
 </body>

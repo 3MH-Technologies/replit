@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""إجبار الاتصالات على IPv4 — يحل مشاكل DNS داخل حاويات Hugging Face."""
+"""إجبار الاتصالات على IPv4 — يحل مشاكل DNS الشائعة داخل بيئات الحاويات."""
 import socket
 
 _orig_getaddrinfo = socket.getaddrinfo

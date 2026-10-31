@@ -1,0 +1,34 @@
+services:
+  hostbot:
+    build: .
+    container_name: hostbot
+    restart: unless-stopped
+    ports:
+      - "${PORT:-7860}:7860"
+    environment:
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS: ${ADMIN_PASS:-admin}
+      SECRET_KEY: ${SECRET_KEY:-}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
+      MAX_EXTRACT_MB: ${MAX_EXTRACT_MB:-500}
+      MAX_ZIP_ENTRIES: ${MAX_ZIP_ENTRIES:-3000}
+      MONITOR_INTERVAL: ${MONITOR_INTERVAL:-15}
+      RESTART_DELAY_BASE: ${RESTART_DELAY_BASE:-3}
+      RESTART_DELAY_MAX: ${RESTART_DELAY_MAX:-60}
+      MAX_BOT_MEM_MB: ${MAX_BOT_MEM_MB:-0}
+      BOT_NICE: ${BOT_NICE:-10}
+      KEEPALIVE_URL: ${KEEPALIVE_URL:-}
+      KEEPALIVE_INTERVAL: ${KEEPALIVE_INTERVAL:-240}
+    volumes:
+      - hostbot-data:/app/BOTS
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/health', timeout=4)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  hostbot-data:

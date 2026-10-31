@@ -4,136 +4,387 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0f14">
 <title>HostBot — لوحة التحكم</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐳</text></svg>">
 <style>
-  :root{--bg:#0b0f14;--card:#151c26;--card2:#1b2430;--border:#26303d;--text:#e6edf3;--muted:#8b98a5;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--amber:#f59e0b}
+  :root{
+    --bg:#080c11;--bg-soft:#0d131b;--card:#121a24;--card2:#17212d;--card3:#1d2937;
+    --border:#243244;--border-soft:#1c2836;--text:#e8eef5;--muted:#8ea0b5;--muted2:#64748b;
+    --accent:#4f8cff;--accent2:#7c5cff;--green:#2dd4a7;--red:#ff6b6b;--amber:#fbbf24;
+    --shadow:0 24px 60px rgba(0,0,0,.45);--radius:16px;
+  }
   *{box-sizing:border-box}
   [hidden]{display:none !important}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif;min-height:100vh}
+  html,body{height:100%}
+  body{
+    margin:0;background:
+      radial-gradient(900px 500px at 85% -10%,rgba(79,140,255,.13),transparent 60%),
+      radial-gradient(700px 500px at 10% 0%,rgba(124,92,255,.10),transparent 55%),
+      var(--bg);
+    color:var(--text);font-family:"Segoe UI",Tahoma,system-ui,-apple-system,Arial,sans-serif;
+    min-height:100vh;
+  }
   a{color:var(--accent);text-decoration:none}
+  button,input,textarea{font:inherit}
+  button{cursor:pointer}
+  ::selection{background:rgba(79,140,255,.35)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#263447;border-radius:999px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
 
-  header{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;background:rgba(13,18,25,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border)}
-  .brand{display:flex;align-items:center;gap:10px;font-size:18px}
-  .brand small{color:var(--muted);font-weight:400;font-size:12px}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
-  .chip{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:4px 12px;white-space:nowrap}
-  .chip b{color:var(--text)}
-  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  /* ---------- header ---------- */
+  header{
+    position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+    justify-content:space-between;padding:12px 20px;background:rgba(8,12,17,.82);
+    backdrop-filter:blur(14px);border-bottom:1px solid var(--border-soft)
+  }
+  .brand{display:flex;align-items:center;gap:11px;min-width:200px}
+  .brand-logo{
+    width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-size:22px;
+    background:linear-gradient(145deg,rgba(79,140,255,.22),rgba(124,92,255,.16));
+    border:1px solid rgba(79,140,255,.35);box-shadow:0 8px 24px rgba(79,140,255,.18)
+  }
+  .brand h1{margin:0;font-size:17px;letter-spacing:.2px}
+  .brand p{margin:1px 0 0;font-size:11.5px;color:var(--muted)}
+  .search{
+    flex:1;max-width:340px;display:flex;align-items:center;gap:8px;background:var(--card);
+    border:1px solid var(--border);border-radius:12px;padding:8px 12px;min-width:170px
+  }
+  .search span{color:var(--muted);font-size:14px}
+  .search input{flex:1;border:0;outline:0;background:transparent;color:var(--text);font-size:13px}
+  .search input::placeholder{color:var(--muted2)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
-  .btn{background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-  .btn:hover{border-color:#3a4757}
-  .btn:disabled{opacity:.5;cursor:wait}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-  .btn.ok{background:#14532d;border-color:#1c7a43;color:#7ee2a8}
-  .btn.danger{background:#3d1717;border-color:#7f2c2c;color:#ff9d9d}
+  /* ---------- buttons ---------- */
+  .btn{
+    background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:11px;
+    padding:8px 14px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;
+    gap:6px;transition:.16s ease;white-space:nowrap;text-decoration:none
+  }
+  .btn:hover{border-color:#38506b;background:var(--card3);transform:translateY(-1px)}
+  .btn:active{transform:none}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn.primary{
+    background:linear-gradient(135deg,var(--accent),#3d6fe0);border-color:transparent;color:#fff;
+    font-weight:600;box-shadow:0 8px 20px rgba(79,140,255,.25)
+  }
+  .btn.primary:hover{filter:brightness(1.07)}
+  .btn.ok{background:rgba(45,212,167,.12);border-color:rgba(45,212,167,.4);color:#7ef0d0}
+  .btn.danger{background:rgba(255,107,107,.1);border-color:rgba(255,107,107,.35);color:#ffaaaa}
   .btn.ghost{background:transparent}
-  .btn.small{padding:4px 9px;font-size:12px;border-radius:8px}
+  .btn.small{padding:5px 10px;font-size:11.5px;border-radius:9px}
+  .icon-btn{width:30px;height:30px;padding:0;border-radius:8px}
 
-  .warn{margin:10px 18px 0;padding:10px 14px;border-radius:10px;background:#3a2a10;border:1px solid #85621c;color:#ffd88a;font-size:13px}
+  /* ---------- status chips ---------- */
+  .statusbar{
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 20px 0;
+    max-width:1440px;margin:0 auto;color:var(--muted);font-size:11.5px
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;background:rgba(18,26,36,.75);
+    border:1px solid var(--border-soft);border-radius:999px;padding:5px 11px;white-space:nowrap
+  }
+  .chip b{color:var(--text);font-weight:600}
+  .chip .chip-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+  .chip.warn .chip-dot{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+  .chip.bad .chip-dot{background:var(--red);box-shadow:0 0 8px var(--red)}
 
-  main{padding:18px;max-width:1400px;margin:0 auto}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
-  .card:hover{border-color:#3a4757}
-  .card-top{display:flex;align-items:center;gap:8px;justify-content:space-between}
-  .card-name{font-weight:600;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .dot{width:10px;height:10px;border-radius:50%;background:#4b5563;flex:none}
-  .dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
-  .badge{font-size:11px;color:var(--muted);background:var(--card2);border:1px solid var(--border);border-radius:999px;padding:2px 9px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .card-meta{margin:9px 0;color:var(--muted);font-size:12px;min-height:16px}
+  /* ---------- main / cards ---------- */
+  main{padding:16px 20px 40px;max-width:1440px;margin:0 auto}
+  .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 0 14px}
+  .section-title{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600}
+  .section-title small{font-weight:400;color:var(--muted);font-size:12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .card{
+    position:relative;background:linear-gradient(180deg,rgba(23,33,45,.9),rgba(18,26,36,.95));
+    border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px;
+    cursor:pointer;transition:.18s ease;overflow:hidden
+  }
+  .card::before{
+    content:"";position:absolute;inset:0 0 auto;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(79,140,255,.5),transparent);opacity:.55
+  }
+  .card:hover{border-color:#36506d;transform:translateY(-2px);box-shadow:0 16px 38px rgba(0,0,0,.28)}
+  .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .bot-title{display:flex;align-items:center;gap:10px;min-width:0}
+  .dot{width:10px;height:10px;border-radius:50%;background:#4b5b6e;flex:none}
+  .dot.on{background:var(--green);box-shadow:0 0 10px var(--green)}
+  .card-name{font-weight:650;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px}
+  .card-sub{margin-top:2px;color:var(--muted);font-size:11.5px;direction:ltr;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px}
+  .status-pill{
+    flex:none;font-size:10.5px;border-radius:999px;padding:3px 9px;border:1px solid var(--border);
+    color:var(--muted);background:var(--card2)
+  }
+  .status-pill.on{color:#8df5d8;border-color:rgba(45,212,167,.35);background:rgba(45,212,167,.09)}
+  .card-stats{
+    margin:13px 0;padding:9px 11px;border-radius:11px;background:rgba(8,12,17,.45);
+    border:1px solid var(--border-soft);color:var(--muted);font-size:11.5px;line-height:1.7;
+    min-height:38px;display:flex;align-items:center;gap:6px;flex-wrap:wrap
+  }
+  .card-stats b{color:var(--text);font-weight:600}
   .card-actions{display:flex;gap:6px;flex-wrap:wrap}
-  .empty{text-align:center;color:var(--muted);padding:70px 20px;border:1px dashed var(--border);border-radius:16px;font-size:14.5px;line-height:2}
+  .empty{
+    text-align:center;color:var(--muted);padding:74px 20px;border:1px dashed var(--border);
+    border-radius:20px;font-size:14px;line-height:2.1;background:rgba(18,26,36,.35)
+  }
+  .empty .big{font-size:38px;display:block;margin-bottom:8px}
+  .empty b{color:var(--text)}
 
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30;display:grid;place-items:center;padding:16px}
-  .drawer{width:min(900px,100%);max-height:92vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
-  .drawer-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid var(--border);background:var(--card2)}
-  .drawer-head .title{display:flex;align-items:center;gap:9px;font-weight:600}
-  .tabs{display:flex;gap:6px;padding:10px 16px 0}
-  .tab{background:transparent;border:0;color:var(--muted);padding:8px 14px;font-size:14px;cursor:pointer;border-bottom:2px solid transparent}
-  .tab.active{color:var(--text);border-bottom-color:var(--accent)}
-  .pane{padding:12px 16px 16px;overflow:auto;flex:1}
-  .pane-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-  .crumbs{color:var(--muted);font-size:13px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;flex:1;min-width:140px}
-  .crumbs span{cursor:pointer}
-  .crumbs span:hover{color:var(--text)}
+  /* ---------- drawer ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:30;display:grid;place-items:center;padding:16px;backdrop-filter:blur(3px)}
+  .drawer{
+    width:min(980px,100%);max-height:92vh;display:flex;flex-direction:column;background:var(--card);
+    border:1px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:var(--shadow)
+  }
+  .drawer-head{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    padding:13px 16px;border-bottom:1px solid var(--border);background:rgba(23,33,45,.85)
+  }
+  .drawer-head .title{display:flex;align-items:center;gap:9px;font-weight:650;min-width:0}
+  .drawer-head .title .name{font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
+  .badge{
+    font-size:10.5px;color:var(--muted);background:var(--card2);border:1px solid var(--border);
+    border-radius:999px;padding:3px 9px;max-width:200px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;direction:ltr
+  }
+  .tabs{display:flex;gap:4px;padding:9px 16px 0;border-bottom:1px solid var(--border-soft)}
+  .tab{
+    background:transparent;border:0;color:var(--muted);padding:9px 14px;font-size:13px;
+    cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px
+  }
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+  .pane{padding:13px 16px 18px;overflow:auto;flex:1;min-height:220px}
+  .pane-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:11px}
+  .crumbs{color:var(--muted);font-size:12.5px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;flex:1;min-width:130px}
+  .crumbs span{cursor:pointer;padding:2px 5px;border-radius:6px}
+  .crumbs span:hover{color:var(--text);background:var(--card2)}
 
-  .file-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid transparent}
+  /* ---------- file rows ---------- */
+  .file-list{display:flex;flex-direction:column;gap:4px}
+  .file-row{
+    display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:11px;
+    border:1px solid transparent;transition:.14s
+  }
   .file-row:hover{background:var(--card2);border-color:var(--border)}
-  .file-row .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
-  .file-row .fsize{color:var(--muted);font-size:11.5px;white-space:nowrap}
-  .file-row .factions{display:flex;gap:4px}
+  .file-icon{width:24px;text-align:center;flex:none;font-size:15px}
+  .file-row .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;min-width:0}
+  .file-row .fname.click{cursor:pointer}
+  .file-row .fname.click:hover{color:#a9c7ff}
+  .file-row .fsize{color:var(--muted);font-size:10.5px;white-space:nowrap;direction:ltr}
+  .file-row .factions{display:flex;gap:3px;flex:none}
+  .main-star{color:#7ef0d0;border-color:rgba(45,212,167,.35)!important;background:rgba(45,212,167,.08)!important}
+  .hint{color:var(--muted);font-size:12.5px;padding:28px 10px;text-align:center;line-height:1.9}
+  .notice{
+    margin:0 0 10px;padding:9px 12px;border-radius:10px;font-size:12.5px;line-height:1.7;
+    background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:#b9d1ff
+  }
+  .notice.error{background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.3);color:#ffb9b9}
+  .notice.ok{background:rgba(45,212,167,.07);border-color:rgba(45,212,167,.25);color:#a5f3de}
+  .dropzone{
+    margin-top:10px;border:1px dashed var(--border);border-radius:12px;padding:14px;
+    text-align:center;color:var(--muted2);font-size:12px;transition:.15s
+  }
+  .dropzone.hot{border-color:var(--accent);background:rgba(79,140,255,.07);color:#b9d1ff}
 
-  textarea.editor{width:100%;height:50vh;border-radius:12px;border:1px solid var(--border);background:#0a0e13;color:#d8e2ec;font-family:Consolas,Monaco,monospace;font-size:13.5px;line-height:1.55;padding:12px;resize:vertical;direction:ltr;text-align:left;outline:none}
-  textarea.editor:focus{border-color:var(--accent)}
+  /* ---------- editor ---------- */
+  textarea.editor{
+    width:100%;height:52vh;border-radius:13px;border:1px solid var(--border);background:#070b10;
+    color:#d8e2ec;font-family:Consolas,Monaco,"Courier New",monospace;font-size:13px;
+    line-height:1.6;padding:13px;resize:vertical;direction:ltr;text-align:left;outline:none;tab-size:4
+  }
+  textarea.editor:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+  .editor-meta{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:11px;margin-top:6px}
 
-  pre.log{margin:0;height:55vh;overflow:auto;background:#0a0e13;border:1px solid var(--border);border-radius:12px;padding:12px;font-size:12.5px;line-height:1.5;direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word;color:#c9d4df}
-  .hint{color:var(--muted);font-size:12.5px;padding:30px 10px;text-align:center}
+  /* ---------- logs ---------- */
+  pre.log{
+    margin:0;height:55vh;overflow:auto;background:#070b10;border:1px solid var(--border);
+    border-radius:13px;padding:13px;font-size:12px;line-height:1.55;direction:ltr;text-align:left;
+    white-space:pre-wrap;word-break:break-word;color:#c9d4df;font-family:Consolas,Monaco,"Courier New",monospace
+  }
+  .log-state{font-size:11.5px;color:var(--muted)}
+  .switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+  .switch input{accent-color:var(--accent)}
 
-  #toast{position:fixed;bottom:22px;inset-inline-start:50%;transform:translateX(50%);z-index:50;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
-  .toast{background:#1c2733;border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:pop .2s}
-  .toast.err{border-color:#7f2c2c;background:#2a1414;color:#ffb4b4}
-  .toast.ok{border-color:#1c7a43;background:#10241a;color:#9be2b8}
+  /* ---------- progress ---------- */
+  .upload-progress{
+    position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:45;
+    width:min(460px,92vw);background:rgba(18,26,36,.97);border:1px solid var(--border);
+    border-radius:13px;padding:10px 13px;box-shadow:var(--shadow)
+  }
+  .upload-progress .line{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--muted);margin-bottom:7px}
+  .upload-progress b{color:var(--text)}
+  .bar{height:7px;border-radius:999px;background:#0a1018;overflow:hidden;border:1px solid var(--border-soft)}
+  .bar i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .18s ease}
+
+  /* ---------- drop overlay ---------- */
+  .drop-overlay{
+    position:fixed;inset:0;z-index:50;background:rgba(8,12,17,.82);backdrop-filter:blur(6px);
+    display:grid;place-items:center;pointer-events:none
+  }
+  .drop-box{
+    border:2px dashed var(--accent);border-radius:24px;padding:44px 54px;text-align:center;
+    background:rgba(79,140,255,.08);box-shadow:0 0 80px rgba(79,140,255,.2)
+  }
+  .drop-box .big{font-size:46px;display:block;margin-bottom:10px}
+  .drop-box h2{margin:0 0 6px;font-size:19px}
+  .drop-box p{margin:0;color:var(--muted);font-size:13px}
+
+  /* ---------- modal ---------- */
+  .modal-overlay{z-index:60}
+  .modal{
+    width:min(440px,100%);background:var(--card);border:1px solid var(--border);
+    border-radius:18px;padding:20px;box-shadow:var(--shadow)
+  }
+  .modal h3{margin:0 0 7px;font-size:16px}
+  .modal p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.8}
+  .modal input{
+    width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+    background:#0a1018;color:var(--text);outline:none;font-size:14px;direction:ltr;text-align:left
+  }
+  .modal input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+  /* ---------- toast ---------- */
+  #toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100;
+    display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none
+  }
+  .toast{
+    background:#182331;border:1px solid var(--border);border-radius:11px;padding:10px 18px;
+    font-size:13px;box-shadow:0 16px 40px rgba(0,0,0,.5);animation:pop .18s ease;
+    max-width:min(520px,92vw);text-align:center
+  }
+  .toast.err{border-color:rgba(255,107,107,.45);background:#2a1518;color:#ffb4b4}
+  .toast.ok{border-color:rgba(45,212,167,.4);background:#0f2620;color:#9be2b8}
   @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  @media (max-width:720px){
+    header{padding:10px 13px}
+    .brand{min-width:0}
+    .brand p{display:none}
+    .search{order:3;max-width:none;width:100%}
+    .statusbar{padding:9px 13px 0}
+    main{padding:14px 13px 34px}
+    .grid{grid-template-columns:1fr}
+    .card-name,.card-sub{max-width:56vw}
+    .drawer{max-height:96vh;border-radius:16px}
+    .pane{padding:11px 12px 14px}
+    .drawer-head .title .name{max-width:48vw}
+    textarea.editor,pre.log{height:46vh}
+    .upload-progress{top:118px}
+  }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">🐳 <b>HostBot</b> <small>لوحة رفع وتشغيل ملفات Python</small></div>
-  <div class="chips" id="sysChips"></div>
+  <div class="brand">
+    <div class="brand-logo">🐳</div>
+    <div>
+      <h1>HostBot</h1>
+      <p>منصة استضافة وتشغيل بوتات Python</p>
+    </div>
+  </div>
+
+  <div class="search">
+    <span>🔎</span>
+    <input id="searchInput" type="search" placeholder="ابحث عن بوت…" autocomplete="off">
+  </div>
+
   <div class="actions">
-    <input type="file" id="quickInput" accept=".py" multiple hidden>
-    <button class="btn primary" id="btnQuick">⬆️ رفع py</button>
+    <input type="file" id="quickInput" accept=".py,.zip" multiple hidden>
+    <button class="btn primary" id="btnQuick">⬆️ رفع ملفات</button>
     <button class="btn" id="btnNew">＋ بوت جديد</button>
     <a class="btn ghost" href="/logout">خروج</a>
   </div>
 </header>
 
-<div class="warn" id="warnBanner" hidden>⚠️ أنت تستخدم كلمة المرور الافتراضية — عيّن متغير البيئة <b>ADMIN_PASS</b> قبل النشر.</div>
+<div class="statusbar" id="sysChips"></div>
 
 <main>
+  <div class="section-head">
+    <div class="section-title">📦 البوتات <small id="botsCount"></small></div>
+    <button class="btn small ghost" id="btnRefresh">↻ تحديث</button>
+  </div>
   <div class="grid" id="botsGrid"></div>
   <div class="empty" id="emptyState" hidden>
-    لا توجد بوتات بعد 🐳<br>
-    اضغط <b>⬆️ رفع py</b> بالأعلى واختر ملفات بوتك — سيُنشأ بوت تلقائيًا وتضغط <b>▶ تشغيل</b>.
+    <span class="big">🐳</span>
+    لا توجد بوتات بعد<br>
+    اضغط <b>⬆️ رفع ملفات</b> واختر ملفات <b>.py</b> أو أرشيف <b>.zip</b>،
+    أو اسحبها وأفلتها في أي مكان بالصفحة.
   </div>
 </main>
 
 <div class="overlay" id="overlay" hidden>
-  <div class="drawer">
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="dName">
     <div class="drawer-head">
-      <div class="title"><span class="dot" id="dDot"></span> <span dir="auto" id="dName"></span> <span class="badge" id="dMain"></span></div>
+      <div class="title">
+        <span class="dot" id="dDot"></span>
+        <span class="name" dir="auto" id="dName"></span>
+        <span class="badge" id="dMain"></span>
+      </div>
       <div class="actions">
-        <button class="btn ok" id="dStart">▶ تشغيل</button>
-        <button class="btn" id="dStop">⏹ إيقاف</button>
-        <button class="btn" id="dRestart">🔄 إعادة</button>
-        <button class="btn danger" id="dDelete">🗑 حذف</button>
-        <button class="btn ghost" id="dClose">✕</button>
+        <button class="btn ok small" id="dStart">▶ تشغيل</button>
+        <button class="btn small" id="dStop">⏹ إيقاف</button>
+        <button class="btn small" id="dRestart">🔄 إعادة</button>
+        <button class="btn danger small" id="dDelete">🗑 حذف</button>
+        <button class="btn ghost small" id="dClose" aria-label="إغلاق">✕</button>
       </div>
     </div>
+
     <div class="tabs">
       <button class="tab active" id="tabFiles">📂 الملفات</button>
       <button class="tab" id="tabLogs">📜 الكونسول</button>
     </div>
+
     <div class="pane" id="paneFiles">
       <div class="pane-toolbar">
         <div class="crumbs" id="crumbs"></div>
         <input type="file" id="botUploadInput" multiple hidden>
-        <button class="btn small" id="btnUploadHere">⬆ رفع ملفات هنا</button>
+        <button class="btn small" id="btnUploadHere">⬆ رفع ملفات</button>
+        <button class="btn small" id="btnNewFolder">📁 مجلد جديد</button>
         <button class="btn small" id="btnNewFile">＋ ملف جديد</button>
       </div>
       <div id="filesList"></div>
+      <div class="dropzone" id="filesDropzone">اسحب الملفات أو أرشيف ZIP وأفلتها هنا للرفع في هذا المجلد</div>
     </div>
+
     <div class="pane" id="paneLogs" hidden>
       <div class="pane-toolbar">
-        <button class="btn small" id="btnClearLog">🧹 تفريغ السجل</button>
-        <button class="btn small" id="btnCopyLog">📋 نسخ السجل</button>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
-          <input type="checkbox" id="autoScroll" checked> تتبع تلقائي
-        </label>
-        <span class="hint" id="logState" style="padding:0"></span>
+        <button class="btn small" id="btnClearLog">🧹 تفريغ</button>
+        <button class="btn small" id="btnCopyLog">📋 نسخ</button>
+        <button class="btn small" id="btnDownloadLog">⬇ تنزيل السجل</button>
+        <label class="switch"><input type="checkbox" id="autoScroll" checked> تتبع تلقائي</label>
+        <span class="log-state" id="logState"></span>
       </div>
       <pre class="log" id="logBox">…</pre>
+    </div>
+  </div>
+</div>
+
+<div class="upload-progress" id="uploadProgress" hidden>
+  <div class="line"><span id="uploadLabel">جارٍ الرفع…</span><b id="uploadPct">0%</b></div>
+  <div class="bar"><i id="uploadBar"></i></div>
+</div>
+
+<div class="drop-overlay" id="dropOverlay" hidden>
+  <div class="drop-box">
+    <span class="big">📥</span>
+    <h2>أفلت الملفات لرفعها</h2>
+    <p>ملفات Python أو أرشيف ZIP — وسيتم إنشاء بوت تلقائيًا</p>
+  </div>
+</div>
+
+<div class="overlay modal-overlay" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h3 id="modalTitle"></h3>
+    <p id="modalText"></p>
+    <input id="modalInput" autocomplete="off" spellcheck="false">
+    <div class="modal-actions">
+      <button class="btn ghost" id="modalCancel">إلغاء</button>
+      <button class="btn primary" id="modalOk">تأكيد</button>
     </div>
   </div>
 </div>
@@ -142,95 +393,251 @@
 
 <script>
 'use strict';
-const $ = (id) => document.getElementById(id);
-const state = { bots: [], current: null, path: '', tab: 'files', logTimer: null, sysTimer: null, botsTimer: null };
 
-/* ---------- helpers ---------- */
-function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const $ = (id) => document.getElementById(id);
+const state = {
+  bots: [],
+  current: null,
+  path: '',
+  tab: 'files',
+  filter: '',
+  logTimer: null,
+  sysTimer: null,
+  botsTimer: null,
+  uploading: false
+};
+
+/* ------------------------------------------------------------------ helpers */
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function joinPath(a, b){ return a ? a + '/' + b : b; }
-function fmtUptime(s){ if(!s) return ''; const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60); if(d) return d+' يوم '+h+' س'; if(h) return h+' س '+m+' د'; return m+' د'; }
-function toast(msg, kind){
+function fmtUptime(s){
+  if (!s) return '';
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return d + ' يوم ' + h + ' س';
+  if (h) return h + ' س ' + m + ' د';
+  return m + ' د';
+}
+function toast(msg, kind, ms){
   const t = document.createElement('div');
   t.className = 'toast ' + (kind || '');
   t.textContent = msg;
   $('toast').appendChild(t);
-  setTimeout(() => t.remove(), 3800);
-}
-async function api(path, options){
-  const res = await fetch(path, options);
-  if (res.status === 401) { location.href = '/login'; throw new Error('unauthorized'); }
-  let data = {};
-  try { data = await res.json(); } catch(e){}
-  if (!res.ok || data.success === false) throw new Error(data.message || ('خطأ ' + res.status));
-  return data;
-}
-async function act(path, body){
-  return api(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {}) });
+  setTimeout(() => t.remove(), ms || 4200);
 }
 
-/* ---------- system chips ---------- */
+async function api(path, options){
+  const res = await fetch(path, Object.assign({credentials: 'same-origin'}, options || {}));
+  if (res.status === 401){ location.href = '/login'; throw new Error('انتهت الجلسة'); }
+  let data = {};
+  try { data = await res.json(); } catch(e){}
+  if (!res.ok || data.success === false){
+    throw new Error(data.message || ('خطأ ' + res.status));
+  }
+  return data;
+}
+function postJSON(path, body){
+  return api(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {})
+  });
+}
+
+function uploadWithProgress(url, formData, label){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.responseType = 'json';
+    startUpload(label || 'جارٍ الرفع…');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setUploadProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      finishUpload();
+      if (xhr.status === 401){ location.href = '/login'; return reject(new Error('انتهت الجلسة')); }
+      const data = xhr.response || {};
+      if (xhr.status >= 200 && xhr.status < 300 && data.success !== false) resolve(data);
+      else reject(new Error(data.message || ('خطأ ' + xhr.status)));
+    };
+    xhr.onerror = () => { finishUpload(); reject(new Error('تعذر الاتصال بالخادم')); };
+    xhr.send(formData);
+  });
+}
+
+let uploadHideTimer = null;
+function startUpload(label){
+  state.uploading = true;
+  clearTimeout(uploadHideTimer);
+  $('uploadLabel').textContent = label || 'جارٍ الرفع…';
+  $('uploadPct').textContent = '0%';
+  $('uploadBar').style.width = '0%';
+  $('uploadProgress').hidden = false;
+}
+function setUploadProgress(frac){
+  const pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
+  $('uploadBar').style.width = pct + '%';
+  $('uploadPct').textContent = pct + '%';
+}
+function finishUpload(){
+  state.uploading = false;
+  setUploadProgress(1);
+  uploadHideTimer = setTimeout(() => { $('uploadProgress').hidden = true; }, 650);
+}
+
+/* ------------------------------------------------------------------ modal */
+let modalResolver = null;
+function openModal(opts){
+  return new Promise((resolve) => {
+    modalResolver = resolve;
+    $('modalTitle').textContent = opts.title || '';
+    $('modalText').textContent = opts.text || '';
+    $('modalText').hidden = !opts.text;
+    $('modalInput').hidden = !opts.input;
+    $('modalInput').value = opts.value || '';
+    $('modalInput').placeholder = opts.placeholder || '';
+    $('modalOk').textContent = opts.okText || 'تأكيد';
+    $('modalOk').className = 'btn ' + (opts.danger ? 'danger' : 'primary');
+    $('modal').hidden = false;
+    setTimeout(() => {
+      if (opts.input) $('modalInput').focus();
+      else $('modalOk').focus();
+    }, 30);
+  });
+}
+function closeModal(result){
+  $('modal').hidden = true;
+  const resolve = modalResolver;
+  modalResolver = null;
+  if (resolve) resolve(result);
+}
+async function askText(title, text, placeholder, value){
+  const result = await openModal({title, text, input: true, placeholder, value, okText: 'حفظ'});
+  if (result === null) return null;
+  const clean = String(result).trim();
+  return clean || null;
+}
+async function askConfirm(title, text, okText, danger){
+  return await openModal({title, text, okText: okText || 'تأكيد', danger: !!danger}) === true;
+}
+$('modalOk').addEventListener('click', () => {
+  const hasInput = !$('modalInput').hidden;
+  closeModal(hasInput ? $('modalInput').value.trim() : true);
+});
+$('modalCancel').addEventListener('click', () => closeModal(null));
+$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(null); });
+$('modalInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter'){ e.preventDefault(); $('modalOk').click(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape'){
+    if (!$('modal').hidden) closeModal(null);
+    else if (!$('overlay').hidden) closeDrawer();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && $('edBox')){
+    e.preventDefault();
+    $('edSave')?.click();
+  }
+});
+
+/* ------------------------------------------------------------------ system */
 async function loadSystem(){
   try {
     const d = await api('/api/system');
+    const memClass = d.mem_percent >= 90 ? 'bad' : d.mem_percent >= 75 ? 'warn' : '';
+    const diskClass = d.disk_percent >= 90 ? 'bad' : d.disk_percent >= 75 ? 'warn' : '';
     $('sysChips').innerHTML =
-      '<span class="chip">CPU <b>'+ (d.cpu|0) +'%</b></span>' +
-      '<span class="chip">RAM <b>'+ d.mem_used +'/'+ d.mem_total +' MB</b></span>' +
-      '<span class="chip">بوتات <b>'+ d.bots_running +'/'+ d.bots_total +'</b></span>' +
-      '<span class="chip">يعمل منذ <b>'+ fmtUptime(d.uptime) +'</b></span>';
-    $('warnBanner').hidden = !d.default_password;
+      '<span class="chip"><span class="chip-dot"></span> الخادم <b>متصل</b></span>' +
+      '<span class="chip">CPU <b>' + (d.cpu | 0) + '%</b></span>' +
+      '<span class="chip ' + memClass + '"><span class="chip-dot"></span> RAM <b>' + d.mem_used + '/' + d.mem_total + ' MB</b></span>' +
+      '<span class="chip ' + diskClass + '"><span class="chip-dot"></span> القرص <b>' + (d.disk_percent | 0) + '%</b></span>' +
+      '<span class="chip">البوتات <b>' + d.bots_running + '/' + d.bots_total + '</b></span>' +
+      '<span class="chip">يعمل منذ <b>' + fmtUptime(d.uptime) + '</b></span>';
   } catch(e){}
 }
 
-/* ---------- bots grid ---------- */
+/* ------------------------------------------------------------------ bots */
 let lastSig = null;
-function botMetaText(b){
+let botsSeq = 0;
+function botStats(b){
   if (b.running){
-    return 'RAM ' + (b.mem ?? 0) + ' MB · CPU ' + (b.cpu ?? 0) + '%' + (b.uptime ? ' · منذ ' + fmtUptime(b.uptime) : '');
+    const parts = [];
+    if (b.mem !== null && b.mem !== undefined) parts.push('RAM <b>' + b.mem + ' MB</b>');
+    if (b.cpu !== null && b.cpu !== undefined) parts.push('CPU <b>' + b.cpu + '%</b>');
+    if (b.uptime) parts.push('منذ <b>' + fmtUptime(b.uptime) + '</b>');
+    return parts.join(' <span style="color:#334155">·</span> ') || 'يعمل الآن';
   }
   if (b.exit_code !== null && b.exit_code !== undefined){
-    return 'متوقف · آخر خروج برمز ' + b.exit_code + (b.exit_code === 0 ? ' (انتهى طبيعيًا)' : ' (خطأ)');
+    return 'متوقف · آخر خروج برمز <b>' + b.exit_code + '</b>' +
+      (b.exit_code === 0 ? ' <span style="color:#8ea0b5">(انتهى طبيعيًا)</span>' : '');
   }
   return 'متوقف';
 }
-async function loadBots(){
+function visibleBots(){
+  if (!state.filter) return state.bots;
+  const q = state.filter;
+  return state.bots.filter(b =>
+    b.name.toLowerCase().includes(q) ||
+    (b.main || '').toLowerCase().includes(q)
+  );
+}
+function renderBots(force){
+  const bots = visibleBots();
+  $('emptyState').hidden = bots.length > 0;
+  if (!bots.length){
+    $('emptyState').innerHTML = state.filter
+      ? '<span class="big">🔎</span>لا توجد نتائج مطابقة لـ <b>' + esc(state.filter) + '</b>'
+      : '<span class="big">🐳</span>لا توجد بوتات بعد<br>' +
+        'اضغط <b>⬆️ رفع ملفات</b> واختر ملفات <b>.py</b> أو أرشيف <b>.zip</b>،<br>' +
+        'أو اسحبها وأفلتها في أي مكان بالصفحة.';
+  }
+  $('botsCount').textContent = state.bots.length ? '(' + state.bots.length + ')' : '';
+
+  const sig = bots.map(b => b.name + '|' + (b.running ? 1 : 0) + '|' + b.main + '|' + (b.exit_code ?? '')).join(';');
+  if (!force && sig === lastSig) {
+    bots.forEach(b => {
+      const el = $('botsGrid').querySelector('[data-stats="' + CSS.escape(b.name) + '"]');
+      if (el) el.innerHTML = botStats(b);
+    });
+    return;
+  }
+  lastSig = sig;
+
+  $('botsGrid').innerHTML = bots.map(b => {
+    return '<div class="card" data-bot="' + esc(b.name) + '">' +
+      '<div class="card-head">' +
+        '<div class="bot-title">' +
+          '<span class="dot ' + (b.running ? 'on' : '') + '"></span>' +
+          '<div style="min-width:0">' +
+            '<div class="card-name" dir="auto">' + esc(b.name) + '</div>' +
+            '<div class="card-sub" title="' + esc(b.main || 'بدون ملف رئيسي') + '">' + esc(b.main || 'بدون ملف رئيسي') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<span class="status-pill ' + (b.running ? 'on' : '') + '">' + (b.running ? 'يعمل' : 'متوقف') + '</span>' +
+      '</div>' +
+      '<div class="card-stats" data-stats="' + esc(b.name) + '">' + botStats(b) + '</div>' +
+      '<div class="card-actions">' +
+        '<button class="btn small ok" data-act="start" ' + (b.running ? 'disabled' : '') + '>▶ تشغيل</button>' +
+        '<button class="btn small" data-act="stop" ' + (b.running ? '' : 'disabled') + '>⏹ إيقاف</button>' +
+        '<button class="btn small" data-act="restart" ' + (b.running ? '' : 'disabled') + '>🔄 إعادة</button>' +
+        '<button class="btn small ghost" data-act="open">📂 فتح</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function loadBots(force){
+  const seq = ++botsSeq;
   let d;
   try { d = await api('/api/bots'); } catch(e){ return; }
-  state.bots = d.bots;
-  const grid = $('botsGrid');
-  $('emptyState').hidden = d.bots.length > 0;
-
-  const sig = d.bots.map(b => b.name + '|' + (b.running ? 1 : 0) + '|' + b.main + '|' + (b.exit_code ?? '')).join(';');
-  if (sig !== lastSig){
-    lastSig = sig;
-    grid.innerHTML = d.bots.map(b => {
-      return '<div class="card" data-bot="' + esc(b.name) + '">' +
-        '<div class="card-top">' +
-          '<div style="display:flex;align-items:center;gap:9px;min-width:0">' +
-            '<span class="dot ' + (b.running ? 'on' : '') + '"></span>' +
-            '<span class="card-name" dir="auto">' + esc(b.name) + '</span>' +
-          '</div>' +
-          '<span class="badge" dir="auto">' + esc(b.main || 'بدون ملف رئيسي') + '</span>' +
-        '</div>' +
-        '<div class="card-meta" data-meta="' + esc(b.name) + '">' + esc(botMetaText(b)) + '</div>' +
-        '<div class="card-actions">' +
-          '<button class="btn small ok" data-act="start" ' + (b.running ? 'disabled' : '') + '>▶ تشغيل</button>' +
-          '<button class="btn small" data-act="stop" ' + (b.running ? '' : 'disabled') + '>⏹ إيقاف</button>' +
-          '<button class="btn small" data-act="restart" ' + (b.running ? '' : 'disabled') + '>🔄 إعادة</button>' +
-          '<button class="btn small" data-act="open">📂 فتح</button>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-  } else {
-    // حدّث الأرقام فقط بدون إعادة بناء البطاقات (حتى لا تنقطع ضغطة الزر)
-    d.bots.forEach(b => {
-      const el = grid.querySelector('[data-meta="' + b.name + '"]');
-      if (el) el.textContent = botMetaText(b);
-    });
-  }
+  if (seq !== botsSeq) return;
+  state.bots = d.bots || [];
+  renderBots(force);
 
   if (state.current){
-    const b = d.bots.find(x => x.name === state.current);
-    if (!b) { closeDrawer(); return; }
+    const b = state.bots.find(x => x.name === state.current);
+    if (!b){ closeDrawer(); return; }
     $('dDot').className = 'dot ' + (b.running ? 'on' : '');
     $('dMain').textContent = b.main || 'بدون ملف رئيسي';
   }
@@ -243,24 +650,32 @@ $('botsGrid').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
   const actName = btn ? btn.dataset.act : 'open';
   if (btn) e.stopPropagation();
-  if (actName === 'open') { openDrawer(name); return; }
+  if (actName === 'open'){ openDrawer(name); return; }
   btn.disabled = true;
   try {
-    await act('/api/bots/' + encodeURIComponent(name) + '/action/' + actName);
-    toast(actName === 'stop' ? 'تم الإيقاف' : 'تم التشغيل', 'ok');
+    await postJSON('/api/bots/' + encodeURIComponent(name) + '/action/' + actName);
+    toast(actName === 'stop' ? 'تم إيقاف البوت' : 'تم تشغيل البوت', 'ok');
   } catch(ex){ toast(ex.message, 'err'); }
   btn.disabled = false;
-  loadBots();
+  loadBots(true);
 });
 
-/* ---------- drawer ---------- */
+$('searchInput').addEventListener('input', (e) => {
+  state.filter = e.target.value.trim().toLowerCase();
+  renderBots(true);
+});
+$('btnRefresh').addEventListener('click', () => { loadBots(true); loadSystem(); });
+
+/* ------------------------------------------------------------------ drawer */
 function openDrawer(name){
   state.current = name;
   state.path = '';
   $('overlay').hidden = false;
   $('dName').textContent = name;
+  $('dMain').textContent = '';
   showTab('files');
   loadFiles('');
+  loadBots(true);
 }
 function closeDrawer(){
   state.current = null;
@@ -273,23 +688,28 @@ $('overlay').addEventListener('click', (e) => { if (e.target === $('overlay')) c
 async function drawerAction(kind){
   if (!state.current) return;
   if (kind === 'delete'){
-    if (!confirm('حذف البوت "' + state.current + '"؟ سيتم إيقافه وحذف كل ملفاته.')) return;
-    try { await act('/api/bots/' + encodeURIComponent(state.current) + '/delete'); toast('تم الحذف', 'ok'); }
-    catch(ex){ toast(ex.message, 'err'); return; }
-    closeDrawer(); loadBots(); return;
+    const ok = await askConfirm('حذف البوت', 'سيتم إيقاف البوت "' + state.current + '" وحذف كل ملفاته نهائيًا.', 'حذف', true);
+    if (!ok) return;
+    try {
+      await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/delete');
+      toast('تم حذف البوت', 'ok');
+    } catch(ex){ toast(ex.message, 'err'); return; }
+    closeDrawer();
+    loadBots(true);
+    return;
   }
   try {
-    await act('/api/bots/' + encodeURIComponent(state.current) + '/action/' + kind);
-    toast(kind === 'stop' ? 'تم الإيقاف' : 'تم التشغيل', 'ok');
+    await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/action/' + kind);
+    toast(kind === 'stop' ? 'تم إيقاف البوت' : 'تم تشغيل البوت', 'ok');
   } catch(ex){ toast(ex.message, 'err'); }
-  loadBots();
+  loadBots(true);
 }
 $('dStart').addEventListener('click', () => drawerAction('start'));
 $('dStop').addEventListener('click', () => drawerAction('stop'));
 $('dRestart').addEventListener('click', () => drawerAction('restart'));
 $('dDelete').addEventListener('click', () => drawerAction('delete'));
 
-/* ---------- tabs ---------- */
+/* ------------------------------------------------------------------ tabs */
 function showTab(tab){
   state.tab = tab;
   $('tabFiles').classList.toggle('active', tab === 'files');
@@ -305,13 +725,30 @@ function showTab(tab){
 $('tabFiles').addEventListener('click', () => showTab('files'));
 $('tabLogs').addEventListener('click', () => showTab('logs'));
 
-/* ---------- files ---------- */
+/* ------------------------------------------------------------------ files */
+function fileIcon(name){
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.py')) return '🐍';
+  if (lower.endsWith('.zip')) return '📦';
+  if (lower === '.env' || lower.startsWith('.env.')) return '🔐';
+  if (lower.endsWith('.json')) return '🧾';
+  if (lower.endsWith('.txt') || lower.endsWith('.md')) return '📝';
+  if (lower.endsWith('.yml') || lower.endsWith('.yaml')) return '⚙️';
+  if (/\.(png|jpe?g|gif|webp|svg|ico)$/.test(lower)) return '🖼️';
+  if (lower.endsWith('.db') || lower.endsWith('.sqlite')) return '🗄️';
+  return '📄';
+}
+
+let filesSeq = 0;
 async function loadFiles(rel){
   if (!state.current) return;
+  const seq = ++filesSeq;
   state.path = rel || '';
   let d;
-  try { d = await api('/api/bots/' + encodeURIComponent(state.current) + '/files?path=' + encodeURIComponent(state.path)); }
-  catch(ex){ toast(ex.message, 'err'); return; }
+  try {
+    d = await api('/api/bots/' + encodeURIComponent(state.current) + '/files?path=' + encodeURIComponent(state.path));
+  } catch(ex){ toast(ex.message, 'err'); return; }
+  if (seq !== filesSeq) return;
 
   const parts = state.path ? state.path.split('/') : [];
   let crumb = '<span data-goto="">🏠 الجذر</span>';
@@ -326,55 +763,97 @@ async function loadFiles(rel){
   if (state.path === ''){
     try {
       const chk = await api('/api/bots/' + encodeURIComponent(state.current) + '/check');
+      if (seq !== filesSeq) return;
       if (chk.problem){
-        rows.push('<div class="warn" style="margin:0 0 10px">⚠️ ' + esc(chk.problem) + '</div>');
+        rows.push('<div class="notice error">⚠️ ' + esc(chk.problem) + '</div>');
       } else if (chk.main){
-        rows.push('<div class="hint" style="padding:0 0 10px;text-align:right">✅ الملف الرئيسي <b dir="auto">' + esc(chk.main) +
-          '</b> — ' + chk.lines + ' سطر · ' + (chk.size/1024).toFixed(1) + ' KB</div>');
+        rows.push('<div class="notice ok">✅ الملف الرئيسي <b dir="auto">' + esc(chk.main) +
+          '</b> — ' + chk.lines + ' سطر · ' + (chk.size / 1024).toFixed(1) + ' KB</div>');
       }
     } catch(e){}
   }
+
   d.dirs.forEach(dir => {
+    const dirPath = joinPath(state.path, dir.name);
     rows.push('<div class="file-row">' +
-      '<span>📁</span>' +
-      '<span class="fname" dir="auto" style="cursor:pointer" data-dir="' + esc(dir.name) + '">' + esc(dir.name) + '</span>' +
+      '<span class="file-icon">📁</span>' +
+      '<span class="fname click" dir="auto" data-dir="' + esc(dir.name) + '">' + esc(dir.name) + '</span>' +
       '<span class="factions">' +
-        '<button class="btn small danger" data-del="' + esc(dir.name) + '" data-kind="dir">🗑</button>' +
+        '<button class="btn small danger icon-btn" data-del="' + esc(dirPath) + '" data-kind="dir" title="حذف المجلد">🗑</button>' +
       '</span></div>');
   });
+
   d.files.forEach(f => {
     const relPath = joinPath(state.path, f.name);
     const isMain = d.main === relPath;
     const isPy = f.name.toLowerCase().endsWith('.py');
+    const isZip = f.name.toLowerCase().endsWith('.zip');
     rows.push('<div class="file-row">' +
-      '<span>📄</span>' +
-      '<span class="fname" dir="auto" style="cursor:pointer" data-edit="' + esc(relPath) + '">' + esc(f.name) + (isMain ? ' <span class="badge" style="color:#7ee2a8;border-color:#1c7a43">★ الملف الرئيسي</span>' : '') + '</span>' +
+      '<span class="file-icon">' + fileIcon(f.name) + '</span>' +
+      '<span class="fname click" dir="auto" data-edit="' + esc(relPath) + '" title="تحرير">' + esc(f.name) +
+        (isMain ? ' <span class="badge main-star">★ رئيسي</span>' : '') + '</span>' +
       '<span class="fsize">' + esc(f.size_h) + '</span>' +
       '<span class="factions">' +
-        (isPy && !isMain ? '<button class="btn small" data-main="' + esc(relPath) + '" title="تعيين كملف رئيسي">★</button>' : '') +
-        '<button class="btn small" data-edit="' + esc(relPath) + '">✏️</button>' +
-        '<button class="btn small danger" data-del="' + esc(relPath) + '" data-kind="file">🗑</button>' +
+        (isPy && !isMain ? '<button class="btn small icon-btn" data-main="' + esc(relPath) + '" title="تعيين كملف رئيسي">★</button>' : '') +
+        (isZip ? '<button class="btn small icon-btn" data-extract="' + esc(relPath) + '" title="استخراج الأرشيف">📦</button>' : '') +
+        '<button class="btn small icon-btn" data-download="' + esc(relPath) + '" title="تنزيل">⬇</button>' +
+        '<button class="btn small icon-btn" data-edit="' + esc(relPath) + '" title="تحرير">✏️</button>' +
+        '<button class="btn small danger icon-btn" data-del="' + esc(relPath) + '" data-kind="file" title="حذف">🗑</button>' +
       '</span></div>');
   });
-  $('filesList').innerHTML = rows.join('') || '<div class="hint">المجلد فارغ — ارفع ملفاتك من الزر بالأعلى ⬆</div>';
-  $('btnUploadHere').dataset.path = state.path;
+
+  $('filesList').innerHTML = '<div class="file-list">' + (rows.join('') ||
+    '<div class="hint">المجلد فارغ — ارفع ملفاتك أو أنشئ ملفًا جديدًا من الأزرار بالأعلى.</div>') + '</div>';
 }
 
 $('filesList').addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-dir],[data-edit],[data-del],[data-main]');
+  const t = e.target.closest('[data-dir],[data-edit],[data-del],[data-main],[data-download],[data-extract]');
   if (!t) return;
+
   if (t.dataset.dir !== undefined){ loadFiles(joinPath(state.path, t.dataset.dir)); return; }
+
   if (t.dataset.main !== undefined){
-    try { await act('/api/bots/' + encodeURIComponent(state.current) + '/main', { file: t.dataset.main }); toast('تم تعيين الملف الرئيسي', 'ok'); }
-    catch(ex){ toast(ex.message, 'err'); }
-    loadFiles(state.path); return;
-  }
-  if (t.dataset.edit !== undefined){ openEditor(t.dataset.edit); return; }
-  if (t.dataset.del !== undefined){
-    if (!confirm('حذف "' + t.dataset.del + '"؟')) return;
-    try { await act('/api/bots/' + encodeURIComponent(state.current) + '/delete-file', { path: t.dataset.del, kind: t.dataset.kind }); toast('تم الحذف', 'ok'); }
-    catch(ex){ toast(ex.message, 'err'); }
+    try {
+      await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/main', {file: t.dataset.main});
+      toast('تم تعيين الملف الرئيسي', 'ok');
+    } catch(ex){ toast(ex.message, 'err'); }
     loadFiles(state.path);
+    loadBots(true);
+    return;
+  }
+
+  if (t.dataset.edit !== undefined){ openEditor(t.dataset.edit); return; }
+
+  if (t.dataset.download !== undefined){
+    const a = document.createElement('a');
+    a.href = '/api/bots/' + encodeURIComponent(state.current) + '/download?path=' + encodeURIComponent(t.dataset.download);
+    a.click();
+    return;
+  }
+
+  if (t.dataset.extract !== undefined){
+    const ok = await askConfirm('استخراج الأرشيف', 'سيتم فك ضغط "' + t.dataset.extract + '" داخل المجلد الحالي ثم حذف الأرشيف.', 'استخراج');
+    if (!ok) return;
+    try {
+      const d = await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/extract', {path: t.dataset.extract});
+      toast('تم استخراج ' + d.extracted + ' ملف' + (d.skipped ? ' (تجاهل ' + d.skipped + ')' : ''), 'ok');
+    } catch(ex){ toast(ex.message, 'err'); }
+    loadFiles(state.path);
+    loadBots(true);
+    return;
+  }
+
+  if (t.dataset.del !== undefined){
+    const kind = t.dataset.kind === 'dir' ? 'المجلد' : 'الملف';
+    const ok = await askConfirm('حذف ' + kind, 'سيتم حذف "' + t.dataset.del + '" نهائيًا.', 'حذف', true);
+    if (!ok) return;
+    try {
+      await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/delete-file',
+        {path: t.dataset.del, kind: t.dataset.kind});
+      toast('تم الحذف', 'ok');
+    } catch(ex){ toast(ex.message, 'err'); }
+    loadFiles(state.path);
+    loadBots(true);
   }
 });
 
@@ -383,41 +862,92 @@ $('crumbs').addEventListener('click', (e) => {
   if (s) loadFiles(s.dataset.goto);
 });
 
-/* upload inside bot */
-$('btnUploadHere').addEventListener('click', () => $('botUploadInput').click());
-$('botUploadInput').addEventListener('change', async (e) => {
-  const files = e.target.files;
-  if (!files || !files.length || !state.current) return;
+/* ------------------------------------------------------------------ bot uploads */
+async function uploadToCurrentBot(files){
+  if (!state.current || !files || !files.length) return;
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
   fd.append('path', state.path);
   try {
-    const d = await api('/api/bots/' + encodeURIComponent(state.current) + '/upload', { method: 'POST', body: fd });
-    toast('تم رفع ' + d.saved.length + ' ملف', 'ok');
+    const d = await uploadWithProgress(
+      '/api/bots/' + encodeURIComponent(state.current) + '/upload',
+      fd,
+      'جارٍ رفع ' + files.length + ' ملف…'
+    );
+    const total = (d.saved ? d.saved.length : 0) + (d.extracted || 0);
+    toast('تم الرفع (' + total + ' ملف)' + (d.skipped_count ? ' — تجاهل ' + d.skipped_count : ''), 'ok');
+    if (d.skipped_count && d.skipped && d.skipped.length){
+      toast('تم تجاهل: ' + d.skipped.slice(0, 3).join('، '), 'err', 6000);
+    }
   } catch(ex){ toast(ex.message, 'err'); }
-  e.target.value = '';
   loadFiles(state.path);
-  loadBots();
+  loadBots(true);
+}
+
+$('btnUploadHere').addEventListener('click', () => $('botUploadInput').click());
+$('botUploadInput').addEventListener('change', async (e) => {
+  const files = e.target.files;
+  e.target.value = '';
+  await uploadToCurrentBot(files);
 });
 
-/* new empty file */
+const dz = $('filesDropzone');
+['dragenter', 'dragover'].forEach(evt => dz.addEventListener(evt, (e) => {
+  e.preventDefault(); e.stopPropagation(); dz.classList.add('hot');
+}));
+['dragleave', 'drop'].forEach(evt => dz.addEventListener(evt, (e) => {
+  e.preventDefault(); e.stopPropagation(); dz.classList.remove('hot');
+}));
+dz.addEventListener('drop', async (e) => {
+  if (!state.current) return;
+  await uploadToCurrentBot(e.dataTransfer.files);
+});
+
+/* ------------------------------------------------------------------ new file/folder */
 $('btnNewFile').addEventListener('click', async () => {
-  const name = prompt('اسم الملف الجديد (مثال: bot.py):');
+  if (!state.current) return;
+  const name = await askText(
+    'ملف جديد',
+    'اكتب اسم الملف. يمكنك استخدام / لإنشاء مجلدات، مثل: .env أو config/settings.py',
+    '.env أو config/settings.py'
+  );
   if (!name) return;
-  const clean = name.replace(/[\\/]/g, '');
   try {
-    await act('/api/bots/' + encodeURIComponent(state.current) + '/file', { path: joinPath(state.path, clean), content: '' });
+    await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/file', {
+      path: joinPath(state.path, name),
+      content: ''
+    });
     toast('تم إنشاء الملف', 'ok');
   } catch(ex){ toast(ex.message, 'err'); }
   loadFiles(state.path);
+  loadBots(true);
 });
 
-/* ---------- editor ---------- */
+$('btnNewFolder').addEventListener('click', async () => {
+  if (!state.current) return;
+  const name = await askText(
+    'مجلد جديد',
+    'اكتب اسم المجلد. يمكنك استخدام / لإنشاء مجلدات متداخلة.',
+    'data أو assets/images'
+  );
+  if (!name) return;
+  try {
+    await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/mkdir', {
+      path: joinPath(state.path, name)
+    });
+    toast('تم إنشاء المجلد', 'ok');
+  } catch(ex){ toast(ex.message, 'err'); }
+  loadFiles(state.path);
+});
+
+/* ------------------------------------------------------------------ editor */
 async function openEditor(rel){
   let d;
-  try { d = await api('/api/bots/' + encodeURIComponent(state.current) + '/file?path=' + encodeURIComponent(rel)); }
-  catch(ex){ toast(ex.message, 'err'); return; }
+  try {
+    d = await api('/api/bots/' + encodeURIComponent(state.current) + '/file?path=' + encodeURIComponent(rel));
+  } catch(ex){ toast(ex.message, 'err'); return; }
   if (d.binary){ toast('ملف ثنائي — لا يمكن تحريره', 'err'); return; }
+
   const holder = $('filesList');
   holder.innerHTML =
     '<div class="pane-toolbar">' +
@@ -425,18 +955,33 @@ async function openEditor(rel){
       '<button class="btn small ok" id="edSave">💾 حفظ</button>' +
       '<button class="btn small" id="edBack">رجوع</button>' +
     '</div>' +
-    '<textarea class="editor" id="edBox" spellcheck="false"></textarea>';
-  $('edBox').value = d.content;
+    '<textarea class="editor" id="edBox" spellcheck="false"></textarea>' +
+    '<div class="editor-meta"><span id="edLines"></span><span>Ctrl + S للحفظ</span></div>';
+
+  const box = $('edBox');
+  box.value = d.content;
+  const updateLines = () => {
+    const count = box.value ? box.value.split('\n').length : 0;
+    $('edLines').textContent = count + ' سطر';
+  };
+  updateLines();
+  box.addEventListener('input', updateLines);
+
   $('edSave').addEventListener('click', async () => {
     try {
-      await act('/api/bots/' + encodeURIComponent(state.current) + '/file', { path: rel, content: $('edBox').value });
-      toast('تم الحفظ', 'ok');
+      await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/file', {
+        path: rel,
+        content: box.value
+      });
+      toast('تم حفظ الملف', 'ok');
+      loadBots(true);
     } catch(ex){ toast(ex.message, 'err'); }
   });
   $('edBack').addEventListener('click', () => loadFiles(state.path));
+  box.focus();
 }
 
-/* ---------- console ---------- */
+/* ------------------------------------------------------------------ console */
 async function pollLog(){
   if (!state.current || state.tab !== 'logs') return;
   try {
@@ -445,14 +990,22 @@ async function pollLog(){
     const nearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
     box.textContent = d.log || '(لا يوجد سجل بعد)';
     $('logState').textContent = d.running ? '● يعمل الآن' : '○ متوقف';
-    $('logState').style.color = d.running ? '#22c55e' : '#8b98a5';
+    $('logState').style.color = d.running ? '#2dd4a7' : '#8ea0b5';
     if ($('autoScroll').checked && nearBottom) box.scrollTop = box.scrollHeight;
   } catch(e){}
 }
+
 $('btnClearLog').addEventListener('click', async () => {
-  try { await act('/api/bots/' + encodeURIComponent(state.current) + '/log/clear'); toast('تم تفريغ السجل', 'ok'); pollLog(); }
-  catch(ex){ toast(ex.message, 'err'); }
+  if (!state.current) return;
+  const ok = await askConfirm('تفريغ السجل', 'سيتم حذف محتوى السجل الحالي.', 'تفريغ', true);
+  if (!ok) return;
+  try {
+    await postJSON('/api/bots/' + encodeURIComponent(state.current) + '/log/clear');
+    toast('تم تفريغ السجل', 'ok');
+    pollLog();
+  } catch(ex){ toast(ex.message, 'err'); }
 });
+
 $('btnCopyLog').addEventListener('click', async () => {
   const text = $('logBox').textContent || '';
   if (!text.trim() || text === '…' || text === '(لا يوجد سجل بعد)'){
@@ -481,34 +1034,85 @@ $('btnCopyLog').addEventListener('click', async () => {
   toast(done ? 'تم نسخ السجل' : 'تعذر النسخ — حدّد النص وانسخه يدويًا', done ? 'ok' : 'err');
 });
 
-/* ---------- quick upload / new bot ---------- */
-$('btnQuick').addEventListener('click', () => $('quickInput').click());
-$('quickInput').addEventListener('change', async (e) => {
-  const files = e.target.files;
+$('btnDownloadLog').addEventListener('click', () => {
+  if (!state.current) return;
+  const a = document.createElement('a');
+  a.href = '/api/bots/' + encodeURIComponent(state.current) + '/log/download';
+  a.click();
+});
+
+/* ------------------------------------------------------------------ quick upload */
+async function quickUpload(files){
   if (!files || !files.length) return;
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
   try {
-    const d = await api('/api/quick-upload', { method: 'POST', body: fd });
-    toast('تم الرفع (' + d.saved.length + ' ملف) — اضغط ▶ تشغيل على البوت', 'ok');
+    const d = await uploadWithProgress('/api/quick-upload', fd,
+      'جارٍ رفع ' + files.length + ' ملف وإنشاء البوت…');
+    const total = (d.saved ? d.saved.length : 0) + (d.extracted || 0);
+    toast('تم إنشاء البوت "' + d.name + '" (' + total + ' ملف) — اضغط ▶ تشغيل', 'ok', 6000);
+    if (d.skipped_count && d.skipped && d.skipped.length){
+      toast('تم تجاهل: ' + d.skipped.slice(0, 3).join('، '), 'err', 6000);
+    }
+    await loadBots(true);
+    openDrawer(d.name);
   } catch(ex){ toast(ex.message, 'err'); }
+}
+
+$('btnQuick').addEventListener('click', () => $('quickInput').click());
+$('quickInput').addEventListener('change', async (e) => {
+  const files = e.target.files;
   e.target.value = '';
-  loadBots();
+  await quickUpload(files);
 });
+
 $('btnNew').addEventListener('click', async () => {
-  const name = prompt('اسم البوت الجديد (حروف إنجليزية وأرقام وشرطات):');
+  const name = await askText(
+    'بوت جديد',
+    'اسم البوت (حروف إنجليزية وأرقام وشرطات). يمكنك رفع ملفاته بعد الإنشاء.',
+    'my-bot'
+  );
   if (!name) return;
   try {
-    const d = await act('/api/bots', { name });
+    const d = await postJSON('/api/bots', {name});
     toast('تم إنشاء البوت ' + d.name, 'ok');
-    loadBots();
+    await loadBots(true);
+    openDrawer(d.name);
   } catch(ex){ toast(ex.message, 'err'); }
 });
 
-/* ---------- start ---------- */
-loadSystem(); loadBots();
+/* ------------------------------------------------------------------ drag & drop */
+let dragDepth = 0;
+window.addEventListener('dragenter', (e) => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  e.preventDefault();
+  dragDepth++;
+  $('dropOverlay').hidden = false;
+});
+window.addEventListener('dragover', (e) => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  e.preventDefault();
+});
+window.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) $('dropOverlay').hidden = true;
+});
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  $('dropOverlay').hidden = true;
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if (!files || !files.length) return;
+  if (state.current && !$('overlay').hidden) await uploadToCurrentBot(files);
+  else await quickUpload(files);
+});
+
+/* ------------------------------------------------------------------ start */
+loadSystem();
+loadBots(true);
 state.sysTimer = setInterval(loadSystem, 5000);
-state.botsTimer = setInterval(loadBots, 3000);
+state.botsTimer = setInterval(() => loadBots(false), 3000);
 </script>
 </body>
 </html>

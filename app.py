@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-HostBot — لوحة بسيطة لرفع وتشغيل ملفات Python.
+HostBot — لوحة احترافية لرفع وتشغيل بوتات Python.
 
 الفكرة كلها:
-    دخول أدمن  →  ارفع ملف .py  →  شغّل  →  تابع السجلات.
+    دخول أدمن  →  ارفع ملفات .py أو أرشيف .zip  →  شغّل  →  تابع السجلات.
 
 كل شيء يُحفظ في مجلد BOTS/ المجاور لهذا الملف:
     BOTS/<اسم البوت>/meta.json    الملف الرئيسي + التشغيل التلقائي
@@ -15,31 +15,38 @@ HostBot — لوحة بسيطة لرفع وتشغيل ملفات Python.
     ADMIN_PASS   كلمة المرور (افتراضي: admin — عيّنها قبل النشر!)
     PORT         المنفذ (افتراضي: 7860)
     SECRET_KEY   مفتاح جلسات اختياري (يُشتق تلقائيًا إن لم يوجد)
+    MAX_UPLOAD_MB   أقصى حجم للطلب الواحد (افتراضي 200)
+    MAX_EXTRACT_MB  أقصى حجم بعد فك ضغط ZIP (افتراضي 500)
 
     --- الاستمرارية وتوزيع الضغط ---
     BOT_NICE            أولوية البوتات (افتراضي 10 — أقل أولوية من اللوحة)
     MONITOR_INTERVAL    كل كم ثانية يفحص المراقب البوتات (افتراضي 15)
-    MAX_FAILS           أقصى محاولات إعادة تشغيل متتالية (افتراضي 5)
-    KEEPALIVE_URL       رابط عام اختياري (مثل رابط Space) لنبضة الحياة
+    RESTART_DELAY_BASE  أول مهلة انتظار قبل إعادة تشغيل بوت خرج سريعًا (افتراضي 3)
+    RESTART_DELAY_MAX   أقصى مهلة بين محاولات إعادة التشغيل (افتراضي 60)
+    KEEPALIVE_URL       رابط عام اختياري لنبضة الحياة
     KEEPALIVE_INTERVAL  كل كم ثانية تُرسل النبضة (افتراضي 240)
     MAX_BOT_MEM_MB      حد ذاكرة لكل بوت بالميغابايت (0 = بلا حد)
 """
 import hashlib
+import hmac
 import json
 import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
+import zipfile
 from functools import wraps
 
 import psutil
-from flask import (Flask, jsonify, redirect, request, send_from_directory,
-                   session)
+from flask import (Flask, jsonify, redirect, request, send_file,
+                   send_from_directory, session)
 
 # ---------------------------------------------------------------- الإعدادات
 
@@ -50,22 +57,35 @@ RUNNER = os.path.join(BASE_DIR, "runner.py")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin")
 PORT = int(os.environ.get("PORT") or os.environ.get("SERVER_PORT") or 7860)
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "false").lower() in ("1", "true", "yes", "on")
 
 # --- الاستمرارية وتوزيع الضغط ---
 BOT_NICE = int(os.environ.get("BOT_NICE", "10"))                  # أولوية البوتات (أقل = أهم)
 MONITOR_INTERVAL = max(3, int(os.environ.get("MONITOR_INTERVAL", "15")))  # فحص كل كم ثانية
 STABLE_SECONDS = int(os.environ.get("STABLE_SECONDS", "120"))     # اعتبار البوت مستقرًا بعد
-MAX_FAILS = int(os.environ.get("MAX_FAILS", "5"))                 # أقصى محاولات إعادة تشغيل متتالية
 FAIL_WINDOW = 600                                                 # نافذة حساب الأعطال (10 دقائق)
+RESTART_DELAY_BASE = max(1, int(os.environ.get("RESTART_DELAY_BASE", "3")))   # أول مهلة قبل إعادة تشغيل بوت خرج سريعًا
+RESTART_DELAY_MAX = max(10, int(os.environ.get("RESTART_DELAY_MAX", "60")))   # أقصى مهلة بين محاولات الإعادة
 KEEPALIVE_URL = os.environ.get("KEEPALIVE_URL", "").strip()       # رابط عام اختياري للنكزة
 KEEPALIVE_INTERVAL = max(60, int(os.environ.get("KEEPALIVE_INTERVAL", "240")))
-RESTART_ON_CLEAN_EXIT = os.environ.get("RESTART_ON_CLEAN_EXIT", "0").lower() in ("1", "true", "yes", "on")
+
+MAX_UPLOAD_MB = max(1, int(os.environ.get("MAX_UPLOAD_MB", "200")))
+MAX_EXTRACT_MB = max(1, int(os.environ.get("MAX_EXTRACT_MB", "500")))
+MAX_ZIP_ENTRIES = max(10, int(os.environ.get("MAX_ZIP_ENTRIES", "3000")))
 
 MAX_LOG_BYTES = 2 * 1024 * 1024     # يُقصّ السجل عند تجاوز هذا الحجم
 LOG_TAIL_BYTES = 128 * 1024         # ما يُعرض في الكونسول
-MAX_EDIT_BYTES = 256 * 1024         # أقصى حجم ملف قابل للتحرير
+MAX_EDIT_BYTES = 512 * 1024         # أقصى حجم ملف قابل للتحرير
 LOGIN_LIMIT = 7                     # محاولات دخول مسموحة
 LOGIN_WINDOW = 300                  # خلال هذه الثواني
+
+# ملفات داخلية لا تُعرض في مدير الملفات ولا تُستخرج من الأرشيفات
+INTERNAL_FILES = {"meta.json", "server.log", ".req_sha", ".pid"}
+SKIP_ARCHIVE_DIRS = {
+    "__MACOSX", ".git", ".svn", ".hg", "__pycache__", ".venv", "venv",
+    "env", "node_modules", ".idea", ".vscode", "site-packages",
+}
+SKIP_ARCHIVE_FILES = {".DS_Store", "Thumbs.db", "desktop.ini"}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,7 +103,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true",
     PERMANENT_SESSION_LIFETIME=7 * 24 * 3600,
-    MAX_CONTENT_LENGTH=50 * 1024 * 1024,
+    MAX_CONTENT_LENGTH=MAX_UPLOAD_MB * 1024 * 1024,
 )
 os.makedirs(BOTS_DIR, exist_ok=True)
 
@@ -111,9 +131,10 @@ def admin_required(fn):
 
 
 def client_ip():
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        return xff.split(",")[0].strip()
+    if TRUST_PROXY:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
     return request.remote_addr or "?"
 
 
@@ -133,6 +154,40 @@ def bot_dir(name):
         return None
     path = os.path.join(BOTS_DIR, clean)
     return path if os.path.isdir(path) else None
+
+
+def clean_filename(filename):
+    """اسم ملف/مجلد واحد آمن — يدعم العربية وملفات مثل .env."""
+    filename = os.path.basename((filename or "").replace("\\", "/")).strip()
+    if not filename or filename in (".", "..") or "\x00" in filename:
+        return ""
+    if any(ch in filename for ch in '<>:"|?*'):
+        return ""
+    filename = filename.rstrip(". ")
+    if not filename:
+        return ""
+    if re.match(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", filename, re.I):
+        return ""
+    return filename[:120]
+
+
+def validate_rel_path(rel, allow_empty=False):
+    """يتحقق من مسار نسبي داخل مجلد البوت ويمنع الخروج منه."""
+    rel = (rel or "").replace("\\", "/").strip()
+    if not rel:
+        return "" if allow_empty else None
+    if "\x00" in rel or rel.startswith("/") or re.match(r"^[A-Za-z]:", rel):
+        return None
+    parts = [p for p in rel.split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return None
+    clean_parts = []
+    for part in parts:
+        cleaned = clean_filename(part)
+        if not cleaned or cleaned != part:
+            return None
+        clean_parts.append(cleaned)
+    return "/".join(clean_parts)
 
 
 def safe_path(bot_path, rel):
@@ -241,6 +296,174 @@ def human_size(num):
         num /= 1024
 
 
+def zip_member_rel(info):
+    """يرجع مسارًا نسبيًا آمنًا لعنصر داخل ZIP (أو None إن كان خطيرًا/مهملًا)."""
+    name = info.filename
+    # أرشيفات ويندوز القديمة قد تستخدم cp1256/cp1252 بدل UTF-8
+    if not (info.flag_bits & 0x800):
+        try:
+            raw = name.encode("cp437")
+            for enc in ("utf-8", "cp1256", "cp1252"):
+                try:
+                    decoded = raw.decode(enc)
+                    if decoded:
+                        name = decoded
+                        break
+                except UnicodeDecodeError:
+                    continue
+        except UnicodeEncodeError:
+            pass
+    name = name.replace("\\", "/").strip().lstrip("/")
+    if not name:
+        return None
+    parts = [p for p in name.split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return None
+    if parts[0] in SKIP_ARCHIVE_DIRS:
+        return None
+    if any(p in SKIP_ARCHIVE_DIRS for p in parts[:-1]):
+        return None
+    if parts[-1] in SKIP_ARCHIVE_FILES:
+        return None
+    for part in parts:
+        if clean_filename(part) != part:
+            return None
+    return "/".join(parts)
+
+
+def flatten_single_root(dest_dir):
+    """لو كان الأرشيف كله داخل مجلد واحد (مثل تحميل GitHub) نرفع محتواه للجذر."""
+    try:
+        entries = [e for e in os.scandir(dest_dir) if e.name not in INTERNAL_FILES]
+    except OSError:
+        return
+    if len(entries) != 1 or not entries[0].is_dir():
+        return
+    root = entries[0].path
+    try:
+        children = list(os.scandir(root))
+    except OSError:
+        return
+    if not children:
+        return
+    if any(os.path.exists(os.path.join(dest_dir, child.name)) for child in children):
+        return
+    for child in children:
+        shutil.move(child.path, os.path.join(dest_dir, child.name))
+    try:
+        os.rmdir(root)
+    except OSError:
+        pass
+
+
+def safe_extract_zip(zip_path, dest_dir, protect_root=False):
+    """يفك ZIP بأمان: يمنع path traversal والروابط الرمزية وقنابل الضغط.
+
+    protect_root يمنع الأرشيف من الكتابة فوق ملفات اللوحة الداخلية في جذر البوت.
+    يرجع (عدد الملفات المستخرجة، العناصر المتجاهلة، رسالة الخطأ أو "").
+    """
+    extracted = 0
+    skipped = []
+    total = 0
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            infos = zf.infolist()
+            if len(infos) > MAX_ZIP_ENTRIES:
+                return 0, skipped, f"عدد العناصر داخل الأرشيف كبير جدًا ({len(infos)})"
+            for info in infos:
+                rel = zip_member_rel(info)
+                if not rel:
+                    skipped.append(info.filename)
+                    continue
+                if protect_root and "/" not in rel and rel in INTERNAL_FILES:
+                    skipped.append(rel + " (ملف داخلي محمي)")
+                    continue
+                if info.flag_bits & 0x1:
+                    skipped.append(rel + " (مشفّر)")
+                    continue
+                mode = info.external_attr >> 16
+                if stat.S_ISLNK(mode):
+                    skipped.append(rel + " (رابط رمزي)")
+                    continue
+                target = safe_path(dest_dir, rel)
+                if info.is_dir():
+                    os.makedirs(target, exist_ok=True)
+                    continue
+                limit = MAX_EXTRACT_MB * 1024 * 1024
+                if info.file_size > limit:
+                    return extracted, skipped, f"الحجم بعد فك الضغط يتجاوز {MAX_EXTRACT_MB}MB"
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(info) as src, open(target, "wb") as dst:
+                    while True:
+                        chunk = src.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > limit:
+                            dst.close()
+                            try:
+                                os.remove(target)
+                            except OSError:
+                                pass
+                            return extracted, skipped, f"الحجم بعد فك الضغط يتجاوز {MAX_EXTRACT_MB}MB"
+                        dst.write(chunk)
+                extracted += 1
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, RuntimeError, OSError) as exc:
+        return extracted, skipped, f"تعذر فك الأرشيف: {exc}"
+    flatten_single_root(dest_dir)
+    return extracted, skipped, ""
+
+
+def detect_main(root):
+    """يختار أفضل ملف Python ليكون الملف الرئيسي للبوت."""
+    candidates = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if d not in SKIP_ARCHIVE_DIRS and not d.startswith(".")
+        )
+        for filename in filenames:
+            if not filename.lower().endswith(".py"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, filename), root)
+            candidates.append(rel.replace("\\", "/"))
+    if not candidates:
+        return ""
+
+    preferred = {"main", "bot", "app", "run", "start", "server", "index"}
+    unwanted = {"setup", "conftest", "__init__", "test"}
+
+    def rank(rel):
+        filename = rel.rsplit("/", 1)[-1].lower()
+        base = os.path.splitext(filename)[0]
+        if base in preferred:
+            priority = 0
+        elif base in unwanted or base.startswith("test_"):
+            priority = 9
+        else:
+            priority = 2
+        return (priority, rel.count("/"), len(rel), rel.lower())
+
+    return min(candidates, key=rank)
+
+
+def set_main_if_missing(name, path):
+    """يعيّن ملفًا رئيسيًا تلقائيًا إن لم يكن هناك ملف صالح."""
+    meta = read_meta(name)
+    current = (meta.get("main") or "").strip()
+    if current:
+        try:
+            if os.path.isfile(safe_path(path, current)):
+                return current
+        except ValueError:
+            pass
+    main = detect_main(path)
+    if main:
+        meta["main"] = main
+        write_meta(name, meta)
+    return main
+
+
 # ------------------------------------------------- تشغيل / إيقاف العمليات
 
 def proc_info(name):
@@ -342,10 +565,6 @@ def _start_bot_locked(name):
                   if ln.strip() and not ln.strip().startswith("#")]
     if not code_lines:
         return False, "الملف الرئيسي يحتوي تعليقات فقط بدون أي كود"
-    head = content_head[:4096]
-    if "run_polling" not in head and "run_forever" not in head and "asyncio.run" not in head \
-            and "while True" not in head and "idle()" not in head and "run_webhook" not in head:
-        logger.info("bot '%s': main file looks like a short script (no run loop detected)", name)
 
     stop_bot(name)
 
@@ -388,6 +607,7 @@ def _start_bot_locked(name):
     write_pid(name, proc.pid)
     EXITS.pop(name, None)
     meta["autorun"] = True
+    meta["next_restart"] = 0     # تشغيل جديد يلغي أي موعد إعادة معلّق
     write_meta(name, meta)
     logger.info("started bot '%s' (pid=%s)", name, proc.pid)
     return True, ""
@@ -461,87 +681,74 @@ def _monitor_once():
             fails = meta.get("fails") or {}
             if fails.get("count") and now - info["started"] >= STABLE_SECONDS:
                 meta["fails"] = {"count": 0, "first": 0, "last": 0}
+                meta["restart_delay"] = 0
+                meta["next_restart"] = 0
                 write_meta(name, meta)
-                log_append(name, "[SYSTEM] البوت مستقر — تم تصفير عدّاد الأعطال.\n")
             continue
 
-        # البوت مطلوب تشغيله لكنه متوقف → ماذا حدث؟
+        # البوت مطلوب تشغيله لكنه متوقف → نعيده دائمًا (سلوك باقي المنصات):
+        # أي خروج — حتى برمز 0 — يعود له البوت، مع مهلة متصاعدة للملف الذي
+        # ينتهي فورًا حتى لا ندور بلا فائدة، والإيقاف النهائي يبقى يدويًا فقط.
         exit_info = EXITS.get(name) or {}
-        clean = bool(exit_info) and exit_info.get("code") == 0
+        code = exit_info.get("code")
         ran_for = max(0, exit_info.get("at", 0) - exit_info.get("started", 0)) if exit_info else 0
 
-        if clean and ran_for >= STABLE_SECONDS:
-            # عمل فترة محترمة ثم انتهى طبيعيًا → استمرارية: أعده تلقائيًا
+        if ran_for >= STABLE_SECONDS:
+            # عمل فترة كاملة ثم انتهى → استمرارية: نصفّر التأخير ونشغّله فورًا
             meta["fails"] = {"count": 0, "first": 0, "last": 0}
+            meta["restart_delay"] = 0
+            meta["next_restart"] = 0
             write_meta(name, meta)
-            log_append(name, "[SYSTEM] انتهى البوت طبيعيًا — إعادة تشغيل تلقائية للحفاظ على الاستمرارية.\n")
+            why = "طبيعيًا" if code == 0 else f"برمز خروج {code}"
+            log_append(
+                name,
+                f"[SYSTEM] انتهى البوت {why} بعد {int(ran_for)} ثانية عمل — "
+                "إعادة تشغيل تلقائية.\n",
+            )
             ok, msg = start_bot(name, only_if_stopped=True)
             if not ok:
                 log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
-            logger.info("monitor: clean exit restart '%s' -> %s %s", name, ok, msg)
+            logger.info("monitor: restart '%s' -> %s %s", name, ok, msg)
             time.sleep(0.7)
             continue
 
-        if clean and ran_for < STABLE_SECONDS and not RESTART_ON_CLEAN_EXIT:
-            # ملف ينتهي فورًا: إعادة تشغيله بلا فائدة — أوقف المحاولات واشرح السبب
-            main = (meta.get("main") or "").strip()
-            size_txt = lines_txt = ""
-            try:
-                mpath = safe_path(os.path.join(BOTS_DIR, name), main)
-                fsize = os.path.getsize(mpath)
-                with open(mpath, "r", encoding="utf-8", errors="replace") as fh:
-                    flines = fh.read().count("\n") + 1
-                size_txt, lines_txt = human_size(fsize), f"{flines} سطر"
-            except (ValueError, OSError):
-                pass
-            meta["autorun"] = False
-            meta["fails"] = {"count": 0, "first": 0, "last": 0}
+        next_at = float(meta.get("next_restart") or 0)
+        if now < next_at:
+            continue             # ما زلنا داخل مهلة الانتظار قبل الإعادة المجدولة
+
+        if next_at:
+            # حان موعد الإعادة المقررة → شغّله الآن (الشغيل يلغي الموعد نفسه)
+            meta["next_restart"] = 0
             write_meta(name, meta)
-            log_append(
-                name,
-                f"[SYSTEM] انتهى الملف فورًا برمز خروج 0 (بعد {int(ran_for)} ثانية) — "
-                "غالبًا لا توجد به حلقة تشغيل دائمة، لذلك لن يُعاد تشغيله تلقائيًا.\n"
-                + (f"[SYSTEM] حجم الملف الرئيسي: {size_txt} — {lines_txt}. "
-                   "لو الحجم صغير جدًا فالملف ناقص أو لم يُرفع كاملًا.\n" if size_txt else "")
-                + "[SYSTEM] افتح تبويب 📂 الملفات ← اضغط على الملف الرئيسي لمراجعة محتواه، "
-                "وتأكد أن نهايته تشغّل البوت فعليًا (مثل application.run_polling()).\n"
-                "[SYSTEM] لإعادة تشغيله عند كل انتهاء طبيعي: RESTART_ON_CLEAN_EXIT=1\n",
-            )
-            logger.info("monitor: '%s' exits instantly with code 0 — autorun disabled", name)
+            ok, msg = start_bot(name, only_if_stopped=True)
+            if not ok:
+                log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
+            logger.info("monitor: scheduled restart '%s' -> %s %s", name, ok, msg)
+            time.sleep(0.7)
             continue
 
-        # إعادة تشغيل تلقائية بعد انهيار (أو انتهاء طبيعي بعد عمل مستقر)
+        # خروج سريع لم تُجدول له مهلة بعد → مهلة متصاعدة 3 → 6 → 12 → 24 → 48 → 60ث
         fails = meta.get("fails") or {}
         if not fails.get("first") or now - fails.get("first", 0) > FAIL_WINDOW:
             fails = {"count": 0, "first": now, "last": 0}
-        if fails.get("count", 0) >= MAX_FAILS:
-            meta["autorun"] = False
-            meta["fails"] = fails
-            write_meta(name, meta)
-            log_append(
-                name,
-                "[SYSTEM] توقف البوت عدة مرات متتالية — تم إيقاف إعادة التشغيل "
-                "التلقائية. صلّح الخطأ ثم شغّله يدويًا.\n",
-            )
-            logger.warning("monitor: '%s' crash-loop — autorun disabled", name)
-            continue
-        # تأكد أن المستخدم لم يوقفه في هذه اللحظة
-        if not read_meta(name).get("autorun"):
-            continue
         fails["count"] = fails.get("count", 0) + 1
         fails["last"] = now
+
+        prev_delay = int(meta.get("restart_delay") or 0)
+        delay = min(RESTART_DELAY_MAX,
+                    RESTART_DELAY_BASE if not prev_delay else prev_delay * 2)
         meta["fails"] = fails
+        meta["restart_delay"] = delay
+        meta["next_restart"] = now + delay
         write_meta(name, meta)
+        why = (f"برمز خروج 0 بعد {int(ran_for)} ثانية"
+               if code == 0 else f"برمز خروج {code} بعد {int(ran_for)} ثانية")
         log_append(
             name,
-            f"[SYSTEM] مراقب التشغيل: إعادة تشغيل تلقائية "
-            f"(محاولة {fails['count']}/{MAX_FAILS})\n",
+            f"[SYSTEM] انتهى البوت {why} — إعادة تشغيل تلقائية بعد {delay} ثانية "
+            f"(محاولة {fails['count']}). الإيقاف النهائي يكون بزر «إيقاف» فقط.\n",
         )
-        ok, msg = start_bot(name, only_if_stopped=True)
-        if not ok:
-            log_append(name, f"[SYSTEM] فشل إعادة التشغيل: {msg}\n")
-        logger.info("monitor: restart '%s' -> %s %s", name, ok, msg)
-        time.sleep(0.7)         # توزيع حمل إعادة التشغيل
+        logger.info("monitor: quick exit '%s' — next restart in %ss", name, delay)
 
 
 def monitor_loop():
@@ -629,11 +836,15 @@ def api_login():
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
-    ok = (
-        hashlib.sha256(username.encode()).hexdigest() == hashlib.sha256(ADMIN_USER.encode()).hexdigest()
-        and hashlib.sha256(password.encode()).hexdigest() == hashlib.sha256(ADMIN_PASS.encode()).hexdigest()
+    user_ok = hmac.compare_digest(
+        hashlib.sha256(username.encode()).digest(),
+        hashlib.sha256(ADMIN_USER.encode()).digest(),
     )
-    if not ok:
+    pass_ok = hmac.compare_digest(
+        hashlib.sha256(password.encode()).digest(),
+        hashlib.sha256(ADMIN_PASS.encode()).digest(),
+    )
+    if not (user_ok and pass_ok):
         with LOGIN_LOCK:
             LOGIN_FAILS.setdefault(ip, []).append(now)
         return fail("اسم المستخدم أو كلمة المرور غير صحيحة", 401)
@@ -663,7 +874,7 @@ def api_system():
             "uptime": int(time.time() - _app_start),
             "bots_total": len([n for n in os.listdir(BOTS_DIR) if os.path.isdir(os.path.join(BOTS_DIR, n))]),
             "bots_running": count_running(),
-            "default_password": ADMIN_PASS == "admin",
+            "max_upload_mb": MAX_UPLOAD_MB,
         })
     except Exception as exc:
         return fail(f"خطأ: {exc}", 500)
@@ -725,14 +936,14 @@ def api_create_bot():
 @app.route("/api/bots/<name>/check")
 @admin_required
 def api_check_bot(name):
-    """فحص سريع للملف الرئيسي: موجود؟ فارغ؟ فيه حلقة تشغيل؟"""
+    """فحص سريع للملف الرئيسي: موجود؟ فارغ؟"""
     path = bot_dir(name)
     if not path:
         return fail("البوت غير موجود", 404)
     meta = read_meta(name)
     main = (meta.get("main") or "").strip()
-    result = {"success": True, "main": main, "exists": False, "size": 0, "lines": 0,
-              "has_loop": False, "problem": ""}
+    result = {"success": True, "main": main, "exists": False, "size": 0,
+              "lines": 0, "problem": ""}
     if not main:
         result["problem"] = "لم يُحدَّد ملف رئيسي بعد — اضغط ★ بجانب ملف .py"
         return jsonify(result)
@@ -756,15 +967,6 @@ def api_check_bot(name):
     code_lines = [ln for ln in content.splitlines() if ln.strip() and not ln.strip().startswith("#")]
     if not code_lines:
         result["problem"] = "الملف فارغ أو تعليقات فقط"
-        return jsonify(result)
-    loop_markers = ("run_polling", "run_forever", "run_webhook", "asyncio.run",
-                    "while True", "idle()", "start_polling", "executor.start")
-    result["has_loop"] = any(m in content for m in loop_markers)
-    if not result["has_loop"]:
-        result["problem"] = (
-            "لا توجد حلقة تشغيل دائمة في الملف — سينتهي فورًا بعد التشغيل. "
-            "أضف في نهايته مثل: application.run_polling()"
-        )
     return jsonify(result)
 
 
@@ -805,7 +1007,9 @@ def api_set_main(name):
     if not path:
         return fail("البوت غير موجود", 404)
     data = request.get_json(silent=True) or {}
-    rel = (data.get("file") or "").strip()
+    rel = validate_rel_path(data.get("file") or "", allow_empty=True)
+    if rel is None:
+        return fail("مسار غير صالح")
     if rel:
         try:
             full = safe_path(path, rel)
@@ -821,13 +1025,103 @@ def api_set_main(name):
     return jsonify({"success": True})
 
 
+@app.route("/api/bots/<name>/mkdir", methods=["POST"])
+@admin_required
+def api_mkdir(name):
+    path = bot_dir(name)
+    if not path:
+        return fail("البوت غير موجود", 404)
+    data = request.get_json(silent=True) or {}
+    rel = validate_rel_path(data.get("path") or "")
+    if not rel:
+        return fail("اسم المجلد غير صالح")
+    try:
+        target = safe_path(path, rel)
+    except ValueError:
+        return fail("مسار غير صالح")
+    if os.path.exists(target):
+        return fail("يوجد ملف أو مجلد بهذا الاسم بالفعل", 409)
+    try:
+        os.makedirs(target)
+    except OSError as exc:
+        return fail(f"تعذر إنشاء المجلد: {exc}", 500)
+    return jsonify({"success": True, "path": rel})
+
+
+@app.route("/api/bots/<name>/extract", methods=["POST"])
+@admin_required
+def api_extract(name):
+    path = bot_dir(name)
+    if not path:
+        return fail("البوت غير موجود", 404)
+    data = request.get_json(silent=True) or {}
+    rel = validate_rel_path(data.get("path") or "")
+    if not rel:
+        return fail("مسار غير صالح")
+    try:
+        archive = safe_path(path, rel)
+    except ValueError:
+        return fail("مسار غير صالح")
+    if not os.path.isfile(archive) or not archive.lower().endswith(".zip"):
+        return fail("الملف ليس أرشيف ZIP", 404)
+    protect_root = os.path.abspath(os.path.dirname(archive)) == os.path.abspath(path)
+    count, skipped, error = safe_extract_zip(archive, os.path.dirname(archive),
+                                             protect_root=protect_root)
+    if error:
+        return fail(error, 400)
+    if count == 0:
+        return fail("الأرشيف فارغ أو لا يحتوي ملفات صالحة", 400)
+    try:
+        os.remove(archive)
+    except OSError:
+        pass
+    main = set_main_if_missing(name, path)
+    return jsonify({"success": True, "extracted": count,
+                    "skipped": len(skipped), "main": main})
+
+
+@app.route("/api/bots/<name>/download")
+@admin_required
+def api_download(name):
+    path = bot_dir(name)
+    if not path:
+        return fail("البوت غير موجود", 404)
+    rel = validate_rel_path(request.args.get("path", ""))
+    if not rel:
+        return fail("مسار غير صالح")
+    if rel.split("/")[0] in INTERNAL_FILES:
+        return fail("هذا ملف داخلي محمي", 403)
+    try:
+        full = safe_path(path, rel)
+    except ValueError:
+        return fail("مسار غير صالح")
+    if not os.path.isfile(full):
+        return fail("الملف غير موجود", 404)
+    return send_file(full, as_attachment=True, download_name=os.path.basename(full))
+
+
+@app.route("/api/bots/<name>/log/download")
+@admin_required
+def api_log_download(name):
+    path = bot_dir(name)
+    if not path:
+        return fail("البوت غير موجود", 404)
+    log_path = os.path.join(path, "server.log")
+    if not os.path.isfile(log_path):
+        return fail("لا يوجد سجل بعد", 404)
+    return send_file(log_path, as_attachment=True,
+                     download_name=f"{name}-server.log")
+
+
 @app.route("/api/bots/<name>/files")
 @admin_required
 def api_files(name):
     path = bot_dir(name)
     if not path:
         return fail("البوت غير موجود", 404)
-    rel = request.args.get("path", "") or ""
+    rel = validate_rel_path(request.args.get("path", ""), allow_empty=True)
+    if rel is None:
+        return fail("مسار غير صالح")
     try:
         base = safe_path(path, rel)
     except ValueError:
@@ -837,7 +1131,7 @@ def api_files(name):
 
     dirs, files = [], []
     for entry in sorted(os.listdir(base), key=lambda x: x.lower()):
-        if rel == "" and entry in ("meta.json", "server.log", ".req_sha", ".pid"):
+        if rel == "" and entry in INTERNAL_FILES:
             continue
         full = os.path.join(base, entry)
         if os.path.isdir(full):
@@ -859,7 +1153,11 @@ def api_file_read(name):
     path = bot_dir(name)
     if not path:
         return fail("البوت غير موجود", 404)
-    rel = request.args.get("path", "") or ""
+    rel = validate_rel_path(request.args.get("path", ""))
+    if not rel:
+        return fail("مسار غير صالح")
+    if rel.split("/")[0] in INTERNAL_FILES:
+        return fail("هذا ملف داخلي محمي", 403)
     try:
         full = safe_path(path, rel)
     except ValueError:
@@ -885,10 +1183,12 @@ def api_file_save(name):
     if not path:
         return fail("البوت غير موجود", 404)
     data = request.get_json(silent=True) or {}
-    rel = (data.get("path") or "").strip()
+    rel = validate_rel_path(data.get("path") or "")
     content = data.get("content", "")
     if not rel:
         return fail("لم يُحدد الملف")
+    if rel.split("/")[0] in INTERNAL_FILES:
+        return fail("هذا ملف داخلي محمي", 403)
     if len(content.encode("utf-8")) > MAX_EDIT_BYTES:
         return fail("المحتوى كبير جدًا", 413)
     try:
@@ -911,10 +1211,12 @@ def api_file_delete(name):
     if not path:
         return fail("البوت غير موجود", 404)
     data = request.get_json(silent=True) or {}
-    rel = (data.get("path") or "").strip()
+    rel = validate_rel_path(data.get("path") or "")
     kind = (data.get("kind") or "file").lower()
     if not rel:
         return fail("لم يُحدد الملف")
+    if rel.split("/")[0] in INTERNAL_FILES:
+        return fail("هذا ملف داخلي محمي", 403)
     try:
         full = safe_path(path, rel)
     except ValueError:
@@ -931,68 +1233,126 @@ def api_file_delete(name):
     return jsonify({"success": True})
 
 
+def save_uploaded_files(name, path, files, rel=""):
+    """يحفظ الملفات ويفك أرشيفات ZIP بأمان. يرجع (saved, skipped, extracted, main)."""
+    rel = validate_rel_path(rel, allow_empty=True)
+    if rel is None:
+        raise ValueError("مسار غير صالح")
+    target = safe_path(path, rel)
+    os.makedirs(target, exist_ok=True)
+
+    saved, skipped = [], []
+    extracted = 0
+    for f in files:
+        filename = clean_filename(f.filename)
+        if not filename:
+            skipped.append(f.filename or "?")
+            continue
+
+        if filename.lower().endswith(".zip"):
+            fd, tmp_path = tempfile.mkstemp(prefix="hostbot-", suffix=".zip")
+            os.close(fd)
+            try:
+                f.save(tmp_path)
+                protect_root = os.path.abspath(target) == os.path.abspath(path)
+                count, skip, error = safe_extract_zip(
+                    tmp_path, target, protect_root=protect_root
+                )
+                extracted += count
+                if error:
+                    skipped.append(f"{filename}: {error}")
+                skipped.extend(skip)
+            except OSError as exc:
+                skipped.append(f"{filename}: {exc}")
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+            continue
+
+        if os.path.abspath(target) == os.path.abspath(path) and filename in INTERNAL_FILES:
+            skipped.append(filename + " (ملف داخلي محمي)")
+            continue
+        dest = os.path.join(target, filename)
+        if os.path.isdir(dest):
+            skipped.append(filename + " (مجلد بنفس الاسم)")
+            continue
+        try:
+            f.save(dest)
+            saved.append(os.path.relpath(dest, path).replace("\\", "/"))
+        except OSError:
+            skipped.append(filename)
+
+    main = set_main_if_missing(name, path)
+    return saved, skipped, extracted, main
+
+
 @app.route("/api/bots/<name>/upload", methods=["POST"])
 @admin_required
 def api_upload(name):
     path = bot_dir(name)
     if not path:
         return fail("البوت غير موجود", 404)
-    rel = (request.form.get("path") or "").strip()
-    try:
-        target = safe_path(path, rel)
-    except ValueError:
+    rel = validate_rel_path(request.form.get("path") or "", allow_empty=True)
+    if rel is None:
         return fail("مسار غير صالح")
-    os.makedirs(target, exist_ok=True)
 
     files = [f for f in request.files.getlist("files") if f and f.filename]
     if not files:
         return fail("لم تُختر أي ملفات")
-    saved = []
-    for f in files:
-        filename = os.path.basename(f.filename.replace("\\", "/")).strip()
-        if not filename or filename in (".", ".."):
-            continue
-        try:
-            f.save(os.path.join(target, filename))
-            saved.append(filename)
-        except OSError:
-            continue
-    if not saved:
-        return fail("تعذر حفظ الملفات", 500)
-
-    meta = read_meta(name)
-    main_ok = False
-    current_main = meta.get("main") or ""
-    if current_main:
-        try:
-            main_ok = os.path.isfile(safe_path(path, current_main))
-        except ValueError:
-            main_ok = False
-    if not main_ok:
-        first_py = next((x for x in saved if x.lower().endswith(".py")), "")
-        if first_py:
-            meta["main"] = os.path.join(rel, first_py).replace("\\", "/") if rel else first_py
-            write_meta(name, meta)
-    return jsonify({"success": True, "saved": saved})
+    try:
+        saved, skipped, extracted, main = save_uploaded_files(name, path, files, rel)
+    except ValueError:
+        return fail("مسار غير صالح")
+    if not saved and not extracted:
+        reason = skipped[0] if skipped else "سبب غير معروف"
+        return fail(f"تعذر حفظ الملفات: {reason}", 400)
+    return jsonify({
+        "success": True,
+        "saved": saved,
+        "extracted": extracted,
+        "skipped": skipped[:20],
+        "skipped_count": len(skipped),
+        "main": main,
+    })
 
 
 @app.route("/api/quick-upload", methods=["POST"])
 @admin_required
 def api_quick_upload():
-    """رفع سريع من الشريط العلوي: ملفات → بوت جديد/موجود باسم أول ملف."""
+    """رفع سريع: ملفات Python أو أرشيف ZIP → بوت جديد/موجود باسم أول ملف."""
     files = [f for f in request.files.getlist("files") if f and f.filename]
     if not files:
         return fail("اختر ملفًا واحدًا على الأقل")
 
-    py_names = [os.path.basename(f.filename.replace("\\", "/")) for f in files]
-    base = next((os.path.splitext(n)[0] for n in py_names if n.lower().endswith(".py")), "")
+    names = [clean_filename(f.filename) for f in files]
+    preferred = [os.path.splitext(n)[0] for n in names
+                 if n.lower().endswith((".py", ".zip"))]
+    base = preferred[0] if preferred else os.path.splitext(names[0])[0]
     name = sanitize_name(base) or "my-bot"
 
     path = os.path.join(BOTS_DIR, name)
-    if not os.path.exists(path):
+    if not os.path.isdir(path):
         os.makedirs(path)
         write_meta(name, {"name": name, "main": "", "autorun": False})
-    return api_upload(name)
+
+    try:
+        saved, skipped, extracted, main = save_uploaded_files(name, path, files)
+    except ValueError:
+        return fail("مسار غير صالح")
+    if not saved and not extracted:
+        reason = skipped[0] if skipped else "سبب غير معروف"
+        return fail(f"تعذر حفظ الملفات: {reason}", 400)
+    return jsonify({
+        "success": True,
+        "name": name,
+        "saved": saved,
+        "extracted": extracted,
+        "skipped": skipped[:20],
+        "skipped_count": len(skipped),
+        "main": main,
+    })
 
 
 @app.route("/api/bots/<name>/log")
@@ -1023,9 +1383,38 @@ def api_log_clear(name):
 
 # ---------------------------------------------------------------- أخطاء
 
+@app.after_request
+def security_headers(response):
+    response.headers.setdefault("Server", "HostBot")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("X-Robots-Tag", "noindex, nofollow")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+    )
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    if app.config.get("SESSION_COOKIE_SECURE"):
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
+@app.route("/robots.txt")
+def robots():
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
 @app.errorhandler(413)
 def too_large(e):
-    return fail("حجم الملفات كبير جدًا (الحد الأقصى 50MB)", 413)
+    return fail(f"حجم الملفات كبير جدًا (الحد الأقصى {MAX_UPLOAD_MB}MB)", 413)
 
 
 @app.errorhandler(404)
@@ -1039,6 +1428,4 @@ _app_start = time.time()
 
 if __name__ == "__main__":
     logger.info("HostBot — http://0.0.0.0:%s  (admin user: %s)", PORT, ADMIN_USER)
-    if ADMIN_PASS == "admin":
-        logger.warning("!! تستخدم كلمة المرور الافتراضية admin — عيّن ADMIN_PASS قبل النشر")
     app.run(host="0.0.0.0", port=PORT, threaded=True)
