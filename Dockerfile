@@ -10,14 +10,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 # مستخدم غير جذري (أفضل ممارسة أمنية)
 RUN useradd -m -u 1000 user
-USER user
-ENV HOME=/home/user PATH="/home/user/.local/bin:$PATH"
 
 WORKDIR /app
 COPY --chown=user requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip -r requirements.txt
 
 COPY --chown=user . .
+
+# مجلد البوتات + صلاحية تثبيت مكتبات البوتات وقت التشغيل للمستخدم غير الجذري
+RUN mkdir -p /app/BOTS \
+    && chown -R user:user /app \
+    && chown -R user:user "$(python -c 'import site; print(site.getsitepackages()[0])')" /usr/local/bin
+
+USER user
+ENV HOME=/home/user PATH="/home/user/.local/bin:$PATH"
 
 EXPOSE 7860
 CMD ["gunicorn", "-b", "0.0.0.0:7860", "-w", "1", "--threads", "16", "--timeout", "600", "--graceful-timeout", "30", "app:app"]
