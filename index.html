@@ -294,8 +294,10 @@
   </div>
 
   <div class="actions">
-    <input type="file" id="quickInput" accept=".py,.zip" multiple style="position:absolute;left:-9999px;opacity:0">
-    <button class="btn primary" id="btnQuick">⬆️ رفع ملفات</button>
+    <div style="position:relative;display:inline-block">
+    <button class="btn primary" id="btnQuick" tabindex="-1" style="pointer-events:none">⬆️ رفع ملفات</button>
+    <input type="file" id="quickInput" accept=".py,.zip" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer">
+  </div>
     <button class="btn" id="btnNew">＋ بوت جديد</button>
     <a class="btn ghost" href="/logout">خروج</a>
   </div>
@@ -342,8 +344,10 @@
     <div class="pane" id="paneFiles">
       <div class="pane-toolbar">
         <div class="crumbs" id="crumbs"></div>
-        <input type="file" id="botUploadInput" multiple style="position:absolute;left:-9999px;opacity:0">
-        <button class="btn small" id="btnUploadHere">⬆ رفع ملفات</button>
+        <div style="position:relative;display:inline-block">
+        <button class="btn small" id="btnUploadHere" tabindex="-1" style="pointer-events:none">⬆ رفع ملفات</button>
+        <input type="file" id="botUploadInput" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </div>
         <button class="btn small" id="btnNewFolder">📁 مجلد جديد</button>
         <button class="btn small" id="btnNewFile">＋ ملف جديد</button>
       </div>
